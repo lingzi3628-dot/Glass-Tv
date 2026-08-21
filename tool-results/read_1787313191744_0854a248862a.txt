@@ -1,0 +1,1906 @@
+     1→I am building a hybrid web + native IPTV application called GlassTV. Please generate the complete Phase 1 foundation code for me.
+     2→
+     3→PROJECT GOAL FOR PHASE 1
+     4→Build the foundational layer of GlassTV including:
+     5→
+     6→Next.js 15 project setup with App Router
+     7→
+     8→Neon PostgreSQL database connection with Drizzle ORM
+     9→
+    10→Authentication system (using Neon Auth or Auth.js)
+    11→
+    12→AI Onboarding conversational flow
+    13→
+    14→Database schema with all tables
+    15→
+    16→Tailwind CSS with our custom design system
+    17→
+    18→Basic layout with navigation (mobile bottom nav + desktop sidebar)
+    19→
+    20→TECHNICAL STACK
+    21→Layer   Technology
+    22→Framework       Next.js 15 (App Router), React 19
+    23→Database        Neon (Postgres)
+    24→ORM     Drizzle ORM
+    25→Authentication  Neon Auth (preferred) or Auth.js (NextAuth v5)
+    26→Styling Tailwind CSS v4
+    27→State Management        Zustand
+    28→UI Animations   Framer Motion
+    29→1. PROJECT STRUCTURE
+    30→Create the following folder structure:
+    31→
+    32→text
+    33→glass-tv/
+    34→├── app/
+    35→│   ├── (auth)/
+    36→│   │   ├── login/
+    37→│   │   │   └── page.tsx
+    38→│   │   ├── signup/
+    39→│   │   │   └── page.tsx
+    40→│   │   ├── onboarding/
+    41→│   │   │   └── page.tsx
+    42→│   │   └── layout.tsx
+    43→│   ├── (main)/
+    44→│   │   ├── home/
+    45→│   │   │   └── page.tsx
+    46→│   │   ├── guide/
+    47→│   │   │   └── page.tsx
+    48→│   │   ├── favorites/
+    49→│   │   │   └── page.tsx
+    50→│   │   ├── profile/
+    51→│   │   │   └── page.tsx
+    52→│   │   └── layout.tsx
+    53→│   ├── api/
+    54→│   │   ├── auth/
+    55→│   │   │   └── [...nextauth]/
+    56→│   │   │       └── route.ts
+    57→│   │   ├── channels/
+    58→│   │   │   └── route.ts
+    59→│   │   ├── onboarding/
+    60→│   │   │   └── route.ts
+    61→│   │   └── preferences/
+    62→│   │       └── route.ts
+    63→│   ├── globals.css
+    64→│   ├── layout.tsx
+    65→│   └── page.tsx
+    66→├── components/
+    67→│   ├── auth/
+    68→│   │   ├── LoginForm.tsx
+    69→│   │   ├── SignupForm.tsx
+    70→│   │   └── OnboardingFlow.tsx
+    71→│   ├── layout/
+    72→│   │   ├── BottomNav.tsx
+    73→│   │   ├── Sidebar.tsx
+    74→│   │   ├── Header.tsx
+    75→│   │   └── AuthGuard.tsx
+    76→│   └── ui/
+    77→│       ├── GlassCard.tsx
+    78→│       ├── GlassButton.tsx
+    79→│       ├── GlassInput.tsx
+    80→│       └── GradientButton.tsx
+    81→├── lib/
+    82→│   ├── db/
+    83→│   │   ├── index.ts
+    84→│   │   ├── schema.ts
+    85→│   │   └── migrations/
+    86→│   ├── auth/
+    87→│   │   ├── auth.ts
+    88→│   │   └── auth.config.ts
+    89→│   ├── store/
+    90→│   │   ├── userStore.ts
+    91→│   │   └── onboardingStore.ts
+    92→│   └── utils/
+    93→│       └── cn.ts
+    94→├── drizzle.config.ts
+    95→├── tailwind.config.ts
+    96→├── next.config.js
+    97→├── .env.local
+    98→└── package.json
+    99→2. DEPENDENCIES
+   100→Add these to package.json:
+   101→
+   102→json
+   103→{
+   104→  "dependencies": {
+   105→    "next": "15.0.0",
+   106→    "react": "19.0.0",
+   107→    "react-dom": "19.0.0",
+   108→    "@neondatabase/serverless": "^0.9.0",
+   109→    "drizzle-orm": "^0.33.0",
+   110→    "@auth/core": "^0.37.0",
+   111→    "@auth/pg-adapter": "^0.1.0",
+   112→    "next-auth": "^5.0.0-beta.20",
+   113→    "zod": "^3.23.8",
+   114→    "zustand": "^5.0.0",
+   115→    "framer-motion": "^11.0.0",
+   116→    "lucide-react": "^0.468.0",
+   117→    "tailwind-merge": "^2.5.0",
+   118→    "clsx": "^2.1.1"
+   119→  },
+   120→  "devDependencies": {
+   121→    "@types/node": "^20.0.0",
+   122→    "@types/react": "^19.0.0",
+   123→    "@types/react-dom": "^19.0.0",
+   124→    "typescript": "^5.0.0",
+   125→    "tailwindcss": "^4.0.0",
+   126→    "@tailwindcss/postcss": "^4.0.0",
+   127→    "postcss": "^8.0.0",
+   128→    "autoprefixer": "^10.0.0",
+   129→    "drizzle-kit": "^0.22.0"
+   130→  }
+   131→}
+   132→3. ENVIRONMENT VARIABLES (.env.local)
+   133→env
+   134→# Database (Neon)
+   135→DATABASE_URL=postgresql://your-neon-connection-string
+   136→
+   137→# Authentication
+   138→NEXTAUTH_SECRET=your-secret-key
+   139→NEXTAUTH_URL=http://localhost:3000
+   140→
+   141→# Neon Auth (if using Neon Auth)
+   142→NEXT_PUBLIC_NEON_AUTH_URL=https://your-neon-auth-url
+   143→NEXT_PUBLIC_NEON_AUTH_API_KEY=your-neon-auth-api-key
+   144→
+   145→# Environment
+   146→NODE_ENV=development
+   147→4. DATABASE SCHEMA (Drizzle ORM)
+   148→Generate lib/db/schema.ts with the following tables:
+   149→
+   150→typescript
+   151→import { pgTable, text, timestamp, integer, jsonb, boolean, primaryKey, serial } from 'drizzle-orm/pg-core';
+   152→import { relations } from 'drizzle-orm';
+   153→
+   154→// Users - synced from Neon Auth or managed via NextAuth
+   155→export const users = pgTable('users', {
+   156→  id: text('id').primaryKey(),
+   157→  email: text('email').notNull().unique(),
+   158→  displayName: text('display_name'),
+   159→  avatar: text('avatar'),
+   160→  createdAt: timestamp('created_at').defaultNow(),
+   161→  updatedAt: timestamp('updated_at').defaultNow(),
+   162→  deletedAt: timestamp('deleted_at'), // Soft delete
+   163→});
+   164→
+   165→// User Preferences (AI Onboarding data)
+   166→export const userPreferences = pgTable('user_preferences', {
+   167→  id: serial('id').primaryKey(),
+   168→  userId: text('user_id')
+   169→    .notNull()
+   170→    .references(() => users.id, { onDelete: 'cascade' }),
+   171→  preferredGenres: text('preferred_genres').array(),
+   172→  preferredLanguages: text('preferred_languages').array(),
+   173→  favoriteCategories: text('favorite_categories').array(),
+   174→  viewingTime: text('viewing_time'), // morning, afternoon, evening, late_night
+   175→  viewingDevice: text('viewing_device'), // phone, tablet, tv, computer
+   176→  onboardingCompleted: boolean('onboarding_completed').default(false),
+   177→  createdAt: timestamp('created_at').defaultNow(),
+   178→  updatedAt: timestamp('updated_at').defaultNow(),
+   179→});
+   180→
+   181→// Channels (cached from IPTV playlists)
+   182→export const channels = pgTable('channels', {
+   183→  id: text('id').primaryKey(),
+   184→  name: text('name').notNull(),
+   185→  logoUrl: text('logo_url'),
+   186→  streamUrl: text('stream_url').notNull(),
+   187→  category: text('category'),
+   188→  country: text('country'),
+   189→  language: text('language'),
+   190→  isVerified: boolean('is_verified').default(false),
+   191→  lastUpdated: timestamp('last_updated').defaultNow(),
+   192→});
+   193→
+   194→// Favorites
+   195→export const favorites = pgTable('favorites', {
+   196→  userId: text('user_id')
+   197→    .notNull()
+   198→    .references(() => users.id, { onDelete: 'cascade' }),
+   199→  channelId: text('channel_id')
+   200→    .notNull()
+   201→    .references(() => channels.id, { onDelete: 'cascade' }),
+   202→  addedAt: timestamp('added_at').defaultNow(),
+   203→}, (table) => ({
+   204→  pk: primaryKey({ columns: [table.userId, table.channelId] }),
+   205→}));
+   206→
+   207→// Watch History
+   208→export const watchHistory = pgTable('watch_history', {
+   209→  id: serial('id').primaryKey(),
+   210→  userId: text('user_id')
+   211→    .notNull()
+   212→    .references(() => users.id, { onDelete: 'cascade' }),
+   213→  channelId: text('channel_id')
+   214→    .notNull()
+   215→    .references(() => channels.id, { onDelete: 'cascade' }),
+   216→  watchedAt: timestamp('watched_at').defaultNow(),
+   217→  durationSeconds: integer('duration_seconds'),
+   218→});
+   219→
+   220→// AI Captions Cache
+   221→export const captionsCache = pgTable('captions_cache', {
+   222→  id: serial('id').primaryKey(),
+   223→  channelId: text('channel_id')
+   224→    .notNull()
+   225→    .references(() => channels.id, { onDelete: 'cascade' }),
+   226→  timestamp: integer('timestamp').notNull(),
+   227→  text: text('text').notNull(),
+   228→  language: text('language').default('en'),
+   229→  createdAt: timestamp('created_at').defaultNow(),
+   230→}, (table) => ({
+   231→  unique: { columns: [table.channelId, table.timestamp] },
+   232→}));
+   233→
+   234→// Relations
+   235→export const usersRelations = relations(users, ({ many }) => ({
+   236→  preferences: many(userPreferences),
+   237→  favorites: many(favorites),
+   238→  history: many(watchHistory),
+   239→}));
+   240→
+   241→export const channelsRelations = relations(channels, ({ many }) => ({
+   242→  favorites: many(favorites),
+   243→  history: many(watchHistory),
+   244→  captions: many(captionsCache),
+   245→}));
+   246→Generate lib/db/index.ts:
+   247→
+   248→typescript
+   249→import { neon } from '@neondatabase/serverless';
+   250→import { drizzle } from 'drizzle-orm/neon-http';
+   251→import * as schema from './schema';
+   252→
+   253→const sql = neon(process.env.DATABASE_URL!);
+   254→export const db = drizzle(sql, { schema });
+   255→
+   256→export * from './schema';
+   257→Generate drizzle.config.ts:
+   258→
+   259→typescript
+   260→import { defineConfig } from 'drizzle-kit';
+   261→
+   262→export default defineConfig({
+   263→  dialect: 'postgresql',
+   264→  schema: './lib/db/schema.ts',
+   265→  out: './lib/db/migrations',
+   266→  dbCredentials: {
+   267→    url: process.env.DATABASE_URL!,
+   268→  },
+   269→});
+   270→5. AUTHENTICATION SETUP
+   271→Option A: Neon Auth (Recommended)
+   272→If using Neon Auth, the users are automatically synced to neon_auth.users_sync. You just need to query that table.
+   273→
+   274→Create lib/auth/auth.ts:
+   275→
+   276→typescript
+   277→import { neon } from '@neondatabase/serverless';
+   278→import { db } from '@/lib/db';
+   279→
+   280→// Get user by email from neon_auth.users_sync
+   281→export async function getUserByEmail(email: string) {
+   282→  const result = await db.execute(
+   283→    'SELECT * FROM neon_auth.users_sync WHERE email = $1 AND deleted_at IS NULL',
+   284→    [email]
+   285→  );
+   286→  return result.rows[0] || null;
+   287→}
+   288→
+   289→// Get user preferences
+   290→export async function getUserPreferences(userId: string) {
+   291→  const [preferences] = await db
+   292→    .select()
+   293→    .from(userPreferences)
+   294→    .where(eq(userPreferences.userId, userId));
+   295→  return preferences;
+   296→}
+   297→Option B: Auth.js (NextAuth v5)
+   298→Create lib/auth/auth.ts:
+   299→
+   300→typescript
+   301→import NextAuth from 'next-auth';
+   302→import CredentialsProvider from 'next-auth/providers/credentials';
+   303→import { db } from '@/lib/db';
+   304→import { users } from '@/lib/db/schema';
+   305→import { eq } from 'drizzle-orm';
+   306→import { compare } from 'bcryptjs';
+   307→
+   308→export const { handlers, signIn, signOut, auth } = NextAuth({
+   309→  providers: [
+   310→    CredentialsProvider({
+   311→      name: 'Credentials',
+   312→      credentials: {
+   313→        email: { label: 'Email', type: 'email' },
+   314→        password: { label: 'Password', type: 'password' },
+   315→      },
+   316→      async authorize(credentials) {
+   317→        if (!credentials?.email || !credentials?.password) return null;
+   318→
+   319→        const user = await db
+   320→          .select()
+   321→          .from(users)
+   322→          .where(eq(users.email, credentials.email as string))
+   323→          .limit(1);
+   324→
+   325→        if (!user[0]) return null;
+   326→
+   327→        const isValid = await compare(
+   328→          credentials.password as string,
+   329→          user[0].password
+   330→        );
+   331→
+   332→        if (!isValid) return null;
+   333→
+   334→        return {
+   335→          id: user[0].id,
+   336→          email: user[0].email,
+   337→          name: user[0].displayName,
+   338→        };
+   339→      },
+   340→    }),
+   341→  ],
+   342→  pages: {
+   343→    signIn: '/login',
+   344→    signUp: '/signup',
+   345→  },
+   346→  callbacks: {
+   347→    async session({ session, token }) {
+   348→      if (token.sub) {
+   349→        session.user.id = token.sub;
+   350→      }
+   351→      return session;
+   352→    },
+   353→    async jwt({ token, user }) {
+   354→      if (user) {
+   355→        token.sub = user.id;
+   356→      }
+   357→      return token;
+   358→    },
+   359→  },
+   360→});
+   361→Create app/api/auth/[...nextauth]/route.ts:
+   362→
+   363→typescript
+   364→import { handlers } from '@/lib/auth/auth';
+   365→export const { GET, POST } = handlers;
+   366→6. TAILWIND DESIGN SYSTEM
+   367→Generate tailwind.config.ts:
+   368→
+   369→typescript
+   370→import type { Config } from 'tailwindcss';
+   371→
+   372→const config: Config = {
+   373→  content: [
+   374→    './pages/**/*.{js,ts,jsx,tsx,mdx}',
+   375→    './components/**/*.{js,ts,jsx,tsx,mdx}',
+   376→    './app/**/*.{js,ts,jsx,tsx,mdx}',
+   377→  ],
+   378→  theme: {
+   379→    extend: {
+   380→      colors: {
+   381→        primary: {
+   382→          50: '#EEF2FF',
+   383→          100: '#E0E7FF',
+   384→          200: '#C7D2FE',
+   385→          300: '#A5B4FC',
+   386→          400: '#818CF8',
+   387→          500: '#6366F1',
+   388→          600: '#4F46E5', // Primary
+   389→          700: '#4338CA',
+   390→          800: '#3730A3',
+   391→          900: '#312E81',
+   392→          950: '#1E1B4B',
+   393→        },
+   394→        secondary: {
+   395→          50: '#F5F3FF',
+   396→          100: '#EDE9FE',
+   397→          200: '#DDD6FE',
+   398→          300: '#C4B5FD',
+   399→          400: '#A78BFA',
+   400→          500: '#8B5CF6', // Secondary
+   401→          600: '#7C3AED',
+   402→          700: '#6D28D9',
+   403→          800: '#5B21B6',
+   404→          900: '#4C1D95',
+   405→          950: '#2E1065',
+   406→        },
+   407→        warm: {
+   408→          beige: '#FCF7F0',
+   409→          wood: '#D4A373',
+   410→          woodDark: '#B8896C',
+   411→        },
+   412→      },
+   413→      borderRadius: {
+   414→        '2xl': '1rem',
+   415→        '3xl': '1.5rem',
+   416→        '4xl': '2rem',
+   417→      },
+   418→      backdropBlur: {
+   419→        xs: '4px',
+   420→        sm: '8px',
+   421→        md: '16px',
+   422→        lg: '24px',
+   423→        xl: '40px',
+   424→      },
+   425→      animation: {
+   426→        'slide-up': 'slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+   427→        'slide-down': 'slideDown 0.3s ease-out forwards',
+   428→        'fade-in': 'fadeIn 0.3s ease-out forwards',
+   429→        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+   430→      },
+   431→      keyframes: {
+   432→        slideUp: {
+   433→          from: { opacity: '0', transform: 'translateY(40px) scale(0.95)' },
+   434→          to: { opacity: '1', transform: 'translateY(0) scale(1)' },
+   435→        },
+   436→        slideDown: {
+   437→          from: { opacity: '1', transform: 'translateY(0)' },
+   438→          to: { opacity: '0', transform: 'translateY(20px)' },
+   439→        },
+   440→        fadeIn: {
+   441→          from: { opacity: '0' },
+   442→          to: { opacity: '1' },
+   443→        },
+   444→      },
+   445→    },
+   446→  },
+   447→  plugins: [],
+   448→};
+   449→
+   450→export default config;
+   451→Generate app/globals.css:
+   452→
+   453→css
+   454→@tailwind base;
+   455→@tailwind components;
+   456→@tailwind utilities;
+   457→
+   458→@layer base {
+   459→  :root {
+   460→    --background: #F9FAFB;
+   461→    --foreground: #111827;
+   462→    --card: #FFFFFF;
+   463→    --primary: #4F46E5;
+   464→    --secondary: #8B5CF6;
+   465→  }
+   466→
+   467→  * {
+   468→    @apply border-gray-200;
+   469→  }
+   470→
+   471→  body {
+   472→    @apply bg-gray-50 text-gray-900 antialiased;
+   473→    font-feature-settings: "rlig" 1, "calt" 1;
+   474→  }
+   475→}
+   476→
+   477→@layer components {
+   478→  /* Glassmorphism Utility - Accent Only */
+   479→  .glass-premium {
+   480→    @apply bg-white/70 backdrop-blur-xl border border-white/30 shadow-lg;
+   481→    -webkit-backdrop-filter: blur(12px) saturate(180%);
+   482→  }
+   483→
+   484→  .glass-dark {
+   485→    @apply bg-black/40 backdrop-blur-xl border border-white/10 shadow-xl;
+   486→    -webkit-backdrop-filter: blur(12px) saturate(180%);
+   487→  }
+   488→
+   489→  /* Solid Cards - Primary Style */
+   490→  .card-solid {
+   491→    @apply bg-white rounded-2xl shadow-sm border border-gray-100 transition-all duration-300;
+   492→  }
+   493→
+   494→  .card-solid:hover {
+   495→    @apply shadow-lg border-gray-200;
+   496→  }
+   497→
+   498→  .card-solid-accent {
+   499→    @apply bg-white rounded-2xl shadow-sm border-l-4 border-primary-600 transition-all duration-300;
+   500→  }
+   501→
+   502→  /* Gradient Buttons */
+   503→  .btn-gradient {
+   504→    @apply bg-gradient-to-r from-primary-600 to-secondary-500 text-white font-semibold 
+   505→           rounded-xl px-6 py-3 transition-all duration-300 
+   506→           hover:scale-105 hover:shadow-lg hover:shadow-primary-500/30 
+   507→           active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+   508→  }
+   509→
+   510→  .btn-gradient-sm {
+   511→    @apply bg-gradient-to-r from-primary-600 to-secondary-500 text-white font-medium 
+   512→           rounded-lg px-4 py-2 transition-all duration-300 
+   513→           hover:scale-105 hover:shadow-md hover:shadow-primary-500/25 
+   514→           active:scale-95;
+   515→  }
+   516→
+   517→  /* Focus Rings for Smart TV */
+   518→  .focus-ring {
+   519→    @apply focus:outline-none focus-visible:ring-4 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white;
+   520→  }
+   521→}
+   522→7. UI COMPONENTS
+   523→components/ui/GlassCard.tsx
+   524→typescript
+   525→import { cn } from '@/lib/utils/cn';
+   526→import { forwardRef, HTMLAttributes } from 'react';
+   527→
+   528→interface GlassCardProps extends HTMLAttributes<HTMLDivElement> {
+   529→  variant?: 'premium' | 'dark' | 'solid';
+   530→  hoverable?: boolean;
+   531→}
+   532→
+   533→export const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(
+   534→  ({ className, variant = 'solid', hoverable = true, children, ...props }, ref) => {
+   535→    const variants = {
+   536→      premium: 'glass-premium',
+   537→      dark: 'glass-dark',
+   538→      solid: 'card-solid',
+   539→    };
+   540→
+   541→    return (
+   542→      <div
+   543→        ref={ref}
+   544→        className={cn(
+   545→          variants[variant],
+   546→          hoverable && 'transition-all duration-300 hover:scale-[1.02]',
+   547→          className
+   548→        )}
+   549→        {...props}
+   550→      >
+   551→        {children}
+   552→      </div>
+   553→    );
+   554→  }
+   555→);
+   556→GlassCard.displayName = 'GlassCard';
+   557→components/ui/GlassButton.tsx
+   558→typescript
+   559→import { cn } from '@/lib/utils/cn';
+   560→import { ButtonHTMLAttributes, forwardRef } from 'react';
+   561→
+   562→interface GlassButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+   563→  variant?: 'primary' | 'secondary' | 'glass' | 'gradient';
+   564→  size?: 'sm' | 'md' | 'lg';
+   565→}
+   566→
+   567→export const GlassButton = forwardRef<HTMLButtonElement, GlassButtonProps>(
+   568→  ({ className, variant = 'primary', size = 'md', children, ...props }, ref) => {
+   569→    const variants = {
+   570→      primary: 'bg-primary-600 text-white hover:bg-primary-700 focus-ring',
+   571→      secondary: 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 focus-ring',
+   572→      glass: 'glass-premium text-gray-700 hover:bg-white/80 focus-ring',
+   573→      gradient: 'btn-gradient',
+   574→    };
+   575→
+   576→    const sizes = {
+   577→      sm: 'px-4 py-2 text-sm rounded-lg',
+   578→      md: 'px-6 py-3 text-base rounded-xl',
+   579→      lg: 'px-8 py-4 text-lg rounded-2xl',
+   580→    };
+   581→
+   582→    return (
+   583→      <button
+   584→        ref={ref}
+   585→        className={cn(
+   586→          'font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95',
+   587→          variants[variant],
+   588→          sizes[size],
+   589→          className
+   590→        )}
+   591→        {...props}
+   592→      >
+   593→        {children}
+   594→      </button>
+   595→    );
+   596→  }
+   597→);
+   598→GlassButton.displayName = 'GlassButton';
+   599→components/ui/GlassInput.tsx
+   600→typescript
+   601→import { cn } from '@/lib/utils/cn';
+   602→import { InputHTMLAttributes, forwardRef } from 'react';
+   603→
+   604→interface GlassInputProps extends InputHTMLAttributes<HTMLInputElement> {
+   605→  label?: string;
+   606→  error?: string;
+   607→}
+   608→
+   609→export const GlassInput = forwardRef<HTMLInputElement, GlassInputProps>(
+   610→  ({ className, label, error, ...props }, ref) => {
+   611→    return (
+   612→      <div className="space-y-1.5">
+   613→        {label && (
+   614→          <label className="block text-sm font-medium text-gray-700">
+   615→            {label}
+   616→          </label>
+   617→        )}
+   618→        <input
+   619→          ref={ref}
+   620→          className={cn(
+   621→            'w-full px-4 py-3 bg-white border border-gray-200 rounded-xl',
+   622→            'placeholder:text-gray-400 text-gray-900',
+   623→            'transition-all duration-200',
+   624→            'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent',
+   625→            error && 'border-red-500 focus:ring-red-500',
+   626→            className
+   627→          )}
+   628→          {...props}
+   629→        />
+   630→        {error && (
+   631→          <p className="text-sm text-red-500">{error}</p>
+   632→        )}
+   633→      </div>
+   634→    );
+   635→  }
+   636→);
+   637→GlassInput.displayName = 'GlassInput';
+   638→components/ui/GradientButton.tsx
+   639→typescript
+   640→import { cn } from '@/lib/utils/cn';
+   641→import { ButtonHTMLAttributes, forwardRef } from 'react';
+   642→
+   643→interface GradientButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+   644→  size?: 'sm' | 'md' | 'lg';
+   645→}
+   646→
+   647→export const GradientButton = forwardRef<HTMLButtonElement, GradientButtonProps>(
+   648→  ({ className, size = 'md', children, ...props }, ref) => {
+   649→    const sizes = {
+   650→      sm: 'btn-gradient-sm',
+   651→      md: 'btn-gradient',
+   652→      lg: 'btn-gradient text-lg px-8 py-4 rounded-2xl',
+   653→    };
+   654→
+   655→    return (
+   656→      <button
+   657→        ref={ref}
+   658→        className={cn(
+   659→          sizes[size],
+   660→          'focus-ring',
+   661→          className
+   662→        )}
+   663→        {...props}
+   664→      >
+   665→        {children}
+   666→      </button>
+   667→    );
+   668→  }
+   669→);
+   670→GradientButton.displayName = 'GradientButton';
+   671→8. AUTHENTICATION PAGES
+   672→app/(auth)/login/page.tsx
+   673→typescript
+   674→import { LoginForm } from '@/components/auth/LoginForm';
+   675→import { GlassCard } from '@/components/ui/GlassCard';
+   676→import Link from 'next/link';
+   677→
+   678→export default function LoginPage() {
+   679→  return (
+   680→    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-warm-beige p-4">
+   681→      <GlassCard variant="premium" className="w-full max-w-md p-8 space-y-6">
+   682→        <div className="text-center space-y-2">
+   683→          <h1 className="text-3xl font-bold text-gray-900">Welcome to GlassTV</h1>
+   684→          <p className="text-gray-500">Sign in to start watching</p>
+   685→        </div>
+   686→
+   687→        <LoginForm />
+   688→
+   689→        <p className="text-center text-sm text-gray-500">
+   690→          Don't have an account?{' '}
+   691→          <Link href="/signup" className="text-primary-600 font-semibold hover:underline">
+   692→            Sign up
+   693→          </Link>
+   694→        </p>
+   695→      </GlassCard>
+   696→    </div>
+   697→  );
+   698→}
+   699→app/(auth)/signup/page.tsx
+   700→typescript
+   701→import { SignupForm } from '@/components/auth/SignupForm';
+   702→import { GlassCard } from '@/components/ui/GlassCard';
+   703→import Link from 'next/link';
+   704→
+   705→export default function SignupPage() {
+   706→  return (
+   707→    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-warm-beige p-4">
+   708→      <GlassCard variant="premium" className="w-full max-w-md p-8 space-y-6">
+   709→        <div className="text-center space-y-2">
+   710→          <h1 className="text-3xl font-bold text-gray-900">Create Account</h1>
+   711→          <p className="text-gray-500">Start your personalized TV experience</p>
+   712→        </div>
+   713→
+   714→        <SignupForm />
+   715→
+   716→        <p className="text-center text-sm text-gray-500">
+   717→          Already have an account?{' '}
+   718→          <Link href="/login" className="text-primary-600 font-semibold hover:underline">
+   719→            Sign in
+   720→          </Link>
+   721→        </p>
+   722→      </GlassCard>
+   723→    </div>
+   724→  );
+   725→}
+   726→9. AUTHENTICATION COMPONENTS
+   727→components/auth/LoginForm.tsx
+   728→typescript
+   729→'use client';
+   730→
+   731→import { useState } from 'react';
+   732→import { useRouter } from 'next/navigation';
+   733→import { GlassInput } from '@/components/ui/GlassInput';
+   734→import { GradientButton } from '@/components/ui/GradientButton';
+   735→
+   736→export function LoginForm() {
+   737→  const router = useRouter();
+   738→  const [loading, setLoading] = useState(false);
+   739→  const [error, setError] = useState('');
+   740→
+   741→  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+   742→    e.preventDefault();
+   743→    setLoading(true);
+   744→    setError('');
+   745→
+   746→    const formData = new FormData(e.currentTarget);
+   747→    const email = formData.get('email') as string;
+   748→    const password = formData.get('password') as string;
+   749→
+   750→    try {
+   751→      const response = await fetch('/api/auth/login', {
+   752→        method: 'POST',
+   753→        headers: { 'Content-Type': 'application/json' },
+   754→        body: JSON.stringify({ email, password }),
+   755→      });
+   756→
+   757→      if (!response.ok) {
+   758→        const data = await response.json();
+   759→        throw new Error(data.error || 'Login failed');
+   760→      }
+   761→
+   762→      router.push('/onboarding');
+   763→    } catch (err) {
+   764→      setError(err instanceof Error ? err.message : 'Something went wrong');
+   765→    } finally {
+   766→      setLoading(false);
+   767→    }
+   768→  };
+   769→
+   770→  return (
+   771→    <form onSubmit={handleSubmit} className="space-y-4">
+   772→      {error && (
+   773→        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+   774→          {error}
+   775→        </div>
+   776→      )}
+   777→
+   778→      <GlassInput
+   779→        name="email"
+   780→        type="email"
+   781→        label="Email"
+   782→        placeholder="you@example.com"
+   783→        required
+   784→        disabled={loading}
+   785→      />
+   786→
+   787→      <GlassInput
+   788→        name="password"
+   789→        type="password"
+   790→        label="Password"
+   791→        placeholder="••••••••"
+   792→        required
+   793→        disabled={loading}
+   794→      />
+   795→
+   796→      <GradientButton type="submit" className="w-full" disabled={loading}>
+   797→        {loading ? 'Signing in...' : 'Sign In'}
+   798→      </GradientButton>
+   799→    </form>
+   800→  );
+   801→}
+   802→components/auth/SignupForm.tsx
+   803→typescript
+   804→'use client';
+   805→
+   806→import { useState } from 'react';
+   807→import { useRouter } from 'next/navigation';
+   808→import { GlassInput } from '@/components/ui/GlassInput';
+   809→import { GradientButton } from '@/components/ui/GradientButton';
+   810→
+   811→export function SignupForm() {
+   812→  const router = useRouter();
+   813→  const [loading, setLoading] = useState(false);
+   814→  const [error, setError] = useState('');
+   815→
+   816→  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+   817→    e.preventDefault();
+   818→    setLoading(true);
+   819→    setError('');
+   820→
+   821→    const formData = new FormData(e.currentTarget);
+   822→    const name = formData.get('name') as string;
+   823→    const email = formData.get('email') as string;
+   824→    const password = formData.get('password') as string;
+   825→    const confirmPassword = formData.get('confirmPassword') as string;
+   826→
+   827→    if (password !== confirmPassword) {
+   828→      setError('Passwords do not match');
+   829→      setLoading(false);
+   830→      return;
+   831→    }
+   832→
+   833→    try {
+   834→      const response = await fetch('/api/auth/signup', {
+   835→        method: 'POST',
+   836→        headers: { 'Content-Type': 'application/json' },
+   837→        body: JSON.stringify({ name, email, password }),
+   838→      });
+   839→
+   840→      if (!response.ok) {
+   841→        const data = await response.json();
+   842→        throw new Error(data.error || 'Signup failed');
+   843→      }
+   844→
+   845→      router.push('/onboarding');
+   846→    } catch (err) {
+   847→      setError(err instanceof Error ? err.message : 'Something went wrong');
+   848→    } finally {
+   849→      setLoading(false);
+   850→    }
+   851→  };
+   852→
+   853→  return (
+   854→    <form onSubmit={handleSubmit} className="space-y-4">
+   855→      {error && (
+   856→        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+   857→          {error}
+   858→        </div>
+   859→      )}
+   860→
+   861→      <GlassInput
+   862→        name="name"
+   863→        type="text"
+   864→        label="Display Name"
+   865→        placeholder="Your Name"
+   866→        required
+   867→        disabled={loading}
+   868→      />
+   869→
+   870→      <GlassInput
+   871→        name="email"
+   872→        type="email"
+   873→        label="Email"
+   874→        placeholder="you@example.com"
+   875→        required
+   876→        disabled={loading}
+   877→      />
+   878→
+   879→      <GlassInput
+   880→        name="password"
+   881→        type="password"
+   882→        label="Password"
+   883→        placeholder="••••••••"
+   884→        required
+   885→        disabled={loading}
+   886→      />
+   887→
+   888→      <GlassInput
+   889→        name="confirmPassword"
+   890→        type="password"
+   891→        label="Confirm Password"
+   892→        placeholder="••••••••"
+   893→        required
+   894→        disabled={loading}
+   895→      />
+   896→
+   897→      <GradientButton type="submit" className="w-full" disabled={loading}>
+   898→        {loading ? 'Creating Account...' : 'Create Account'}
+   899→      </GradientButton>
+   900→    </form>
+   901→  );
+   902→}
+   903→10. ONBOARDING COMPONENT
+   904→components/auth/OnboardingFlow.tsx
+   905→typescript
+   906→'use client';
+   907→
+   908→import { useState } from 'react';
+   909→import { useRouter } from 'next/navigation';
+   910→import { GlassCard } from '@/components/ui/GlassCard';
+   911→import { GradientButton } from '@/components/ui/GradientButton';
+   912→import { GlassButton } from '@/components/ui/GlassButton';
+   913→import { cn } from '@/lib/utils/cn';
+   914→import { useOnboardingStore } from '@/lib/store/onboardingStore';
+   915→
+   916→const GENRES = [
+   917→  { id: 'sports', label: '⚽ Sports', icon: '🏃' },
+   918→  { id: 'news', label: '📰 News', icon: '📡' },
+   919→  { id: 'movies', label: '🎬 Movies', icon: '🎞️' },
+   920→  { id: 'documentaries', label: '📽️ Documentaries', icon: '🌍' },
+   921→  { id: 'kids', label: '🧒 Kids', icon: '🧸' },
+   922→  { id: 'music', label: '🎵 Music', icon: '🎶' },
+   923→  { id: 'lifestyle', label: '🌿 Lifestyle', icon: '✨' },
+   924→  { id: 'international', label: '🌐 International', icon: '🌍' },
+   925→];
+   926→
+   927→const LANGUAGES = [
+   928→  { id: 'en', label: 'English' },
+   929→  { id: 'es', label: 'Spanish' },
+   930→  { id: 'fr', label: 'French' },
+   931→  { id: 'de', label: 'German' },
+   932→  { id: 'ar', label: 'Arabic' },
+   933→  { id: 'hi', label: 'Hindi' },
+   934→  { id: 'pt', label: 'Portuguese' },
+   935→];
+   936→
+   937→const VIEWING_TIMES = [
+   938→  { id: 'morning', label: '🌅 Morning' },
+   939→  { id: 'afternoon', label: '☀️ Afternoon' },
+   940→  { id: 'evening', label: '🌆 Evening' },
+   941→  { id: 'late_night', label: '🌙 Late Night' },
+   942→];
+   943→
+   944→const VIEWING_DEVICES = [
+   945→  { id: 'phone', label: '📱 Phone' },
+   946→  { id: 'tablet', label: '📱 Tablet' },
+   947→  { id: 'tv', label: '🖥️ TV' },
+   948→  { id: 'computer', label: '💻 Computer' },
+   949→];
+   950→
+   951→type Step = 'welcome' | 'genres' | 'languages' | 'habits' | 'recommendations' | 'complete';
+   952→
+   953→export function OnboardingFlow() {
+   954→  const router = useRouter();
+   955→  const [step, setStep] = useState<Step>('welcome');
+   956→  const [loading, setLoading] = useState(false);
+   957→  const [recommendations, setRecommendations] = useState<string[]>([]);
+   958→
+   959→  const {
+   960→    selectedGenres,
+   961→    selectedLanguages,
+   962→    viewingTime,
+   963→    viewingDevice,
+   964→    toggleGenre,
+   965→    toggleLanguage,
+   966→    setViewingTime,
+   967→    setViewingDevice,
+   968→    reset,
+   969→  } = useOnboardingStore();
+   970→
+   971→  const handleNext = () => {
+   972→    const steps: Step[] = ['welcome', 'genres', 'languages', 'habits', 'recommendations', 'complete'];
+   973→    const currentIndex = steps.indexOf(step);
+   974→    if (currentIndex < steps.length - 1) {
+   975→      setStep(steps[currentIndex + 1]);
+   976→    }
+   977→  };
+   978→
+   979→  const handleBack = () => {
+   980→    const steps: Step[] = ['welcome', 'genres', 'languages', 'habits', 'recommendations', 'complete'];
+   981→    const currentIndex = steps.indexOf(step);
+   982→    if (currentIndex > 0) {
+   983→      setStep(steps[currentIndex - 1]);
+   984→    }
+   985→  };
+   986→
+   987→  const handleGetRecommendations = async () => {
+   988→    setLoading(true);
+   989→    try {
+   990→      const response = await fetch('/api/onboarding/recommendations', {
+   991→        method: 'POST',
+   992→        headers: { 'Content-Type': 'application/json' },
+   993→        body: JSON.stringify({
+   994→          genres: selectedGenres,
+   995→          languages: selectedLanguages,
+   996→          viewingTime,
+   997→          viewingDevice,
+   998→        }),
+   999→      });
+  1000→      const data = await response.json();
+  1001→      setRecommendations(data.channelIds || []);
+  1002→      handleNext();
+  1003→    } catch (error) {
+  1004→      console.error('Failed to get recommendations:', error);
+  1005→    } finally {
+  1006→      setLoading(false);
+  1007→    }
+  1008→  };
+  1009→
+  1010→  const handleComplete = async () => {
+  1011→    setLoading(true);
+  1012→    try {
+  1013→      await fetch('/api/onboarding/complete', {
+  1014→        method: 'POST',
+  1015→        headers: { 'Content-Type': 'application/json' },
+  1016→        body: JSON.stringify({
+  1017→          genres: selectedGenres,
+  1018→          languages: selectedLanguages,
+  1019→          viewingTime,
+  1020→          viewingDevice,
+  1021→        }),
+  1022→      });
+  1023→      router.push('/home');
+  1024→    } catch (error) {
+  1025→      console.error('Failed to complete onboarding:', error);
+  1026→    } finally {
+  1027→      setLoading(false);
+  1028→    }
+  1029→  };
+  1030→
+  1031→  // Step rendering
+  1032→  const renderStep = () => {
+  1033→    switch (step) {
+  1034→      case 'welcome':
+  1035→        return (
+  1036→          <div className="text-center space-y-6">
+  1037→            <div className="space-y-3">
+  1038→              <h2 className="text-2xl font-bold text-gray-900">Welcome to GlassTV! 👋</h2>
+  1039→              <p className="text-gray-500 text-lg">
+  1040→                Let's personalize your TV experience in just a few steps.
+  1041→              </p>
+  1042→            </div>
+  1043→            <div className="grid grid-cols-3 gap-3 text-sm text-gray-600">
+  1044→              <div className="p-3 bg-gray-50 rounded-xl">
+  1045→                <span className="block text-2xl mb-1">🎯</span>
+  1046→                Your interests
+  1047→              </div>
+  1048→              <div className="p-3 bg-gray-50 rounded-xl">
+  1049→                <span className="block text-2xl mb-1">🌍</span>
+  1050→                Your languages
+  1051→              </div>
+  1052→              <div className="p-3 bg-gray-50 rounded-xl">
+  1053→                <span className="block text-2xl mb-1">✨</span>
+  1054→                AI recommendations
+  1055→              </div>
+  1056→            </div>
+  1057→            <GradientButton onClick={handleNext} className="w-full">
+  1058→              Get Started
+  1059→            </GradientButton>
+  1060→          </div>
+  1061→        );
+  1062→
+  1063→      case 'genres':
+  1064→        return (
+  1065→          <div className="space-y-6">
+  1066→            <div>
+  1067→              <h2 className="text-2xl font-bold text-gray-900">What do you love watching?</h2>
+  1068→              <p className="text-gray-500">Select 3-5 genres that interest you</p>
+  1069→            </div>
+  1070→            <div className="grid grid-cols-2 gap-3">
+  1071→              {GENRES.map((genre) => (
+  1072→                <button
+  1073→                  key={genre.id}
+  1074→                  onClick={() => toggleGenre(genre.id)}
+  1075→                  className={cn(
+  1076→                    'p-4 rounded-2xl border-2 transition-all duration-200 text-left',
+  1077→                    selectedGenres.includes(genre.id)
+  1078→                      ? 'border-primary-500 bg-primary-50 text-primary-700'
+  1079→                      : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+  1080→                  )}
+  1081→                >
+  1082→                  <span className="text-2xl block">{genre.icon}</span>
+  1083→                  <span className="font-medium text-sm">{genre.label}</span>
+  1084→                </button>
+  1085→              ))}
+  1086→            </div>
+  1087→            <div className="flex gap-3">
+  1088→              <GlassButton variant="secondary" onClick={handleBack}>
+  1089→                Back
+  1090→              </GlassButton>
+  1091→              <GradientButton
+  1092→                onClick={handleNext}
+  1093→                className="flex-1"
+  1094→                disabled={selectedGenres.length < 3}
+  1095→              >
+  1096→                Next ({selectedGenres.length}/3)
+  1097→              </GradientButton>
+  1098→            </div>
+  1099→          </div>
+  1100→        );
+  1101→
+  1102→      case 'languages':
+  1103→        return (
+  1104→          <div className="space-y-6">
+  1105→            <div>
+  1106→              <h2 className="text-2xl font-bold text-gray-900">What languages do you speak?</h2>
+  1107→              <p className="text-gray-500">Select all that apply</p>
+  1108→            </div>
+  1109→            <div className="grid grid-cols-2 gap-3">
+  1110→              {LANGUAGES.map((lang) => (
+  1111→                <button
+  1112→                  key={lang.id}
+  1113→                  onClick={() => toggleLanguage(lang.id)}
+  1114→                  className={cn(
+  1115→                    'p-4 rounded-2xl border-2 transition-all duration-200 text-center',
+  1116→                    selectedLanguages.includes(lang.id)
+  1117→                      ? 'border-primary-500 bg-primary-50 text-primary-700'
+  1118→                      : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+  1119→                  )}
+  1120→                >
+  1121→                  <span className="font-medium">{lang.label}</span>
+  1122→                </button>
+  1123→              ))}
+  1124→            </div>
+  1125→            <div className="flex gap-3">
+  1126→              <GlassButton variant="secondary" onClick={handleBack}>
+  1127→                Back
+  1128→              </GlassButton>
+  1129→              <GradientButton
+  1130→                onClick={handleNext}
+  1131→                className="flex-1"
+  1132→                disabled={selectedLanguages.length === 0}
+  1133→              >
+  1134→                Next
+  1135→              </GradientButton>
+  1136→            </div>
+  1137→          </div>
+  1138→        );
+  1139→
+  1140→      case 'habits':
+  1141→        return (
+  1142→          <div className="space-y-6">
+  1143→            <div>
+  1144→              <h2 className="text-2xl font-bold text-gray-900">Your viewing habits</h2>
+  1145→              <p className="text-gray-500">Help us understand your routine</p>
+  1146→            </div>
+  1147→
+  1148→            <div>
+  1149→              <p className="text-sm font-medium text-gray-700 mb-3">When do you usually watch?</p>
+  1150→              <div className="grid grid-cols-2 gap-3">
+  1151→                {VIEWING_TIMES.map((time) => (
+  1152→                  <button
+  1153→                    key={time.id}
+  1154→                    onClick={() => setViewingTime(time.id)}
+  1155→                    className={cn(
+  1156→                      'p-4 rounded-2xl border-2 transition-all duration-200 text-center',
+  1157→                      viewingTime === time.id
+  1158→                        ? 'border-primary-500 bg-primary-50 text-primary-700'
+  1159→                        : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+  1160→                    )}
+  1161→                  >
+  1162→                    <span className="font-medium">{time.label}</span>
+  1163→                  </button>
+  1164→                ))}
+  1165→              </div>
+  1166→            </div>
+  1167→
+  1168→            <div>
+  1169→              <p className="text-sm font-medium text-gray-700 mb-3">What device do you use most?</p>
+  1170→              <div className="grid grid-cols-2 gap-3">
+  1171→                {VIEWING_DEVICES.map((device) => (
+  1172→                  <button
+  1173→                    key={device.id}
+  1174→                    onClick={() => setViewingDevice(device.id)}
+  1175→                    className={cn(
+  1176→                      'p-4 rounded-2xl border-2 transition-all duration-200 text-center',
+  1177→                      viewingDevice === device.id
+  1178→                        ? 'border-primary-500 bg-primary-50 text-primary-700'
+  1179→                        : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+  1180→                    )}
+  1181→                  >
+  1182→                    <span className="font-medium">{device.label}</span>
+  1183→                  </button>
+  1184→                ))}
+  1185→              </div>
+  1186→            </div>
+  1187→
+  1188→            <div className="flex gap-3">
+  1189→              <GlassButton variant="secondary" onClick={handleBack}>
+  1190→                Back
+  1191→              </GlassButton>
+  1192→              <GradientButton
+  1193→                onClick={handleGetRecommendations}
+  1194→                className="flex-1"
+  1195→                disabled={!viewingTime || !viewingDevice}
+  1196→              >
+  1197→                {loading ? 'Generating...' : 'Get Recommendations ✨'}
+  1198→              </GradientButton>
+  1199→            </div>
+  1200→          </div>
+  1201→        );
+  1202→
+  1203→      case 'recommendations':
+  1204→        return (
+  1205→          <div className="space-y-6">
+  1206→            <div>
+  1207→              <h2 className="text-2xl font-bold text-gray-900">We think you'll love these ✨</h2>
+  1208→              <p className="text-gray-500">AI-selected channels based on your preferences</p>
+  1209→            </div>
+  1210→            <div className="space-y-3">
+  1211→              {recommendations.length === 0 ? (
+  1212→                <div className="text-center py-8 text-gray-500">
+  1213→                  <div className="text-4xl mb-2">🤔</div>
+  1214→                  <p>No recommendations yet. Let's find something for you!</p>
+  1215→                </div>
+  1216→              ) : (
+  1217→                recommendations.map((channelId, index) => (
+  1218→                  <div
+  1219→                    key={index}
+  1220→                    className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm"
+  1221→                  >
+  1222→                    <div className="w-12 h-12 rounded-xl bg-primary-100 flex items-center justify-center text-primary-600 font-bold">
+  1223→                      {index + 1}
+  1224→                    </div>
+  1225→                    <div className="flex-1">
+  1226→                      <p className="font-medium text-gray-900">Channel {channelId}</p>
+  1227→                      <p className="text-sm text-gray-500">Recommended for you</p>
+  1228→                    </div>
+  1229→                    <button className="p-2 text-primary-500 hover:text-primary-600 transition">
+  1230→                      ❤️
+  1231→                    </button>
+  1232→                  </div>
+  1233→                ))
+  1234→              )}
+  1235→            </div>
+  1236→            <div className="flex gap-3">
+  1237→              <GlassButton variant="secondary" onClick={handleBack}>
+  1238→                Back
+  1239→              </GlassButton>
+  1240→              <GradientButton
+  1241→                onClick={handleComplete}
+  1242→                className="flex-1"
+  1243→                disabled={loading}
+  1244→              >
+  1245→                {loading ? 'Saving...' : 'Let's Go! 🚀'}
+  1246→              </GradientButton>
+  1247→            </div>
+  1248→          </div>
+  1249→        );
+  1250→
+  1251→      case 'complete':
+  1252→        return (
+  1253→          <div className="text-center space-y-6 py-8">
+  1254→            <div className="text-6xl">🎉</div>
+  1255→            <div>
+  1256→              <h2 className="text-3xl font-bold text-gray-900">You're all set!</h2>
+  1257→              <p className="text-gray-500 text-lg mt-2">
+  1258→                Your personalized GlassTV experience is ready.
+  1259→              </p>
+  1260→            </div>
+  1261→            <div className="grid grid-cols-2 gap-4 text-sm">
+  1262→              <div className="p-4 bg-gray-50 rounded-xl">
+  1263→                <span className="font-medium text-gray-700">{selectedGenres.length} genres</span>
+  1264→              </div>
+  1265→              <div className="p-4 bg-gray-50 rounded-xl">
+  1266→                <span className="font-medium text-gray-700">{selectedLanguages.length} languages</span>
+  1267→              </div>
+  1268→            </div>
+  1269→            <GradientButton onClick={handleComplete} className="w-full">
+  1270→              Start Watching 📺
+  1271→            </GradientButton>
+  1272→          </div>
+  1273→        );
+  1274→    }
+  1275→  };
+  1276→
+  1277→  return (
+  1278→    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-warm-beige p-4">
+  1279→      <GlassCard variant="solid" className="w-full max-w-2xl p-8">
+  1280→        <div className="mb-6">
+  1281→          <div className="flex justify-between items-center mb-2">
+  1282→            <span className="text-sm text-gray-400">Step {step === 'welcome' ? 0 : step === 'genres' ? 1 : step === 'languages' ? 2 : step === 'habits' ? 3 : step === 'recommendations' ? 4 : 5} of 5</span>
+  1283→            <button
+  1284→              onClick={() => {
+  1285→                reset();
+  1286→                router.push('/home');
+  1287→              }}
+  1288→              className="text-sm text-gray-400 hover:text-gray-600 transition"
+  1289→            >
+  1290→              Skip
+  1291→            </button>
+  1292→          </div>
+  1293→          <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden">
+  1294→            <div
+  1295→              className="h-full bg-gradient-to-r from-primary-500 to-secondary-500 transition-all duration-500"
+  1296→              style={{
+  1297→                width: step === 'welcome' ? '10%' : step === 'genres' ? '30%' : step === 'languages' ? '50%' : step === 'habits' ? '70%' : step === 'recommendations' ? '90%' : '100%',
+  1298→              }}
+  1299→            />
+  1300→          </div>
+  1301→        </div>
+  1302→        {renderStep()}
+  1303→      </GlassCard>
+  1304→    </div>
+  1305→  );
+  1306→}
+  1307→11. ONBOARDING PAGE
+  1308→app/(auth)/onboarding/page.tsx
+  1309→typescript
+  1310→import { OnboardingFlow } from '@/components/auth/OnboardingFlow';
+  1311→import { auth } from '@/lib/auth/auth';
+  1312→import { redirect } from 'next/navigation';
+  1313→
+  1314→export default async function OnboardingPage() {
+  1315→  const session = await auth();
+  1316→  
+  1317→  if (!session) {
+  1318→    redirect('/login');
+  1319→  }
+  1320→
+  1321→  return <OnboardingFlow />;
+  1322→}
+  1323→12. ZUSTAND STORE
+  1324→lib/store/onboardingStore.ts
+  1325→typescript
+  1326→import { create } from 'zustand';
+  1327→import { persist } from 'zustand/middleware';
+  1328→
+  1329→interface OnboardingState {
+  1330→  selectedGenres: string[];
+  1331→  selectedLanguages: string[];
+  1332→  viewingTime: string | null;
+  1333→  viewingDevice: string | null;
+  1334→  onboardingCompleted: boolean;
+  1335→
+  1336→  toggleGenre: (genre: string) => void;
+  1337→  toggleLanguage: (lang: string) => void;
+  1338→  setViewingTime: (time: string) => void;
+  1339→  setViewingDevice: (device: string) => void;
+  1340→  completeOnboarding: () => void;
+  1341→  reset: () => void;
+  1342→}
+  1343→
+  1344→export const useOnboardingStore = create<OnboardingState>()(
+  1345→  persist(
+  1346→    (set) => ({
+  1347→      selectedGenres: [],
+  1348→      selectedLanguages: [],
+  1349→      viewingTime: null,
+  1350→      viewingDevice: null,
+  1351→      onboardingCompleted: false,
+  1352→
+  1353→      toggleGenre: (genre) =>
+  1354→        set((state) => ({
+  1355→          selectedGenres: state.selectedGenres.includes(genre)
+  1356→            ? state.selectedGenres.filter((g) => g !== genre)
+  1357→            : [...state.selectedGenres, genre],
+  1358→        })),
+  1359→
+  1360→      toggleLanguage: (lang) =>
+  1361→        set((state) => ({
+  1362→          selectedLanguages: state.selectedLanguages.includes(lang)
+  1363→            ? state.selectedLanguages.filter((l) => l !== lang)
+  1364→            : [...state.selectedLanguages, lang],
+  1365→        })),
+  1366→
+  1367→      setViewingTime: (time) => set({ viewingTime: time }),
+  1368→      setViewingDevice: (device) => set({ viewingDevice: device }),
+  1369→      completeOnboarding: () => set({ onboardingCompleted: true }),
+  1370→      reset: () =>
+  1371→        set({
+  1372→          selectedGenres: [],
+  1373→          selectedLanguages: [],
+  1374→          viewingTime: null,
+  1375→          viewingDevice: null,
+  1376→          onboardingCompleted: false,
+  1377→        }),
+  1378→    }),
+  1379→    {
+  1380→      name: 'onboarding-storage',
+  1381→    }
+  1382→  )
+  1383→);
+  1384→13. MAIN LAYOUTS
+  1385→app/(main)/layout.tsx
+  1386→typescript
+  1387→import { AuthGuard } from '@/components/layout/AuthGuard';
+  1388→import { BottomNav } from '@/components/layout/BottomNav';
+  1389→import { Sidebar } from '@/components/layout/Sidebar';
+  1390→import { Header } from '@/components/layout/Header';
+  1391→
+  1392→export default function MainLayout({
+  1393→  children,
+  1394→}: {
+  1395→  children: React.ReactNode;
+  1396→}) {
+  1397→  return (
+  1398→    <AuthGuard>
+  1399→      <div className="min-h-screen bg-gray-50">
+  1400→        {/* Desktop Sidebar */}
+  1401→        <Sidebar />
+  1402→
+  1403→        {/* Mobile Bottom Nav */}
+  1404→        <BottomNav />
+  1405→
+  1406→        {/* Main Content */}
+  1407→        <div className="lg:pl-64 pb-20 lg:pb-0">
+  1408→          <Header />
+  1409→          <main className="container mx-auto px-4 py-6">
+  1410→            {children}
+  1411→          </main>
+  1412→        </div>
+  1413→      </div>
+  1414→    </AuthGuard>
+  1415→  );
+  1416→}
+  1417→components/layout/AuthGuard.tsx
+  1418→typescript
+  1419→'use client';
+  1420→
+  1421→import { useEffect } from 'react';
+  1422→import { useRouter } from 'next/navigation';
+  1423→import { useSession } from 'next-auth/react';
+  1424→
+  1425→export function AuthGuard({ children }: { children: React.ReactNode }) {
+  1426→  const { data: session, status } = useSession();
+  1427→  const router = useRouter();
+  1428→
+  1429→  useEffect(() => {
+  1430→    if (status === 'loading') return;
+  1431→    if (!session) {
+  1432→      router.push('/login');
+  1433→    }
+  1434→  }, [session, status, router]);
+  1435→
+  1436→  if (status === 'loading') {
+  1437→    return (
+  1438→      <div className="min-h-screen flex items-center justify-center">
+  1439→        <div className="animate-pulse text-primary-500 text-xl">Loading...</div>
+  1440→      </div>
+  1441→    );
+  1442→  }
+  1443→
+  1444→  return session ? <>{children}</> : null;
+  1445→}
+  1446→components/layout/BottomNav.tsx
+  1447→typescript
+  1448→'use client';
+  1449→
+  1450→import Link from 'next/link';
+  1451→import { usePathname } from 'next/navigation';
+  1452→import { Home, Compass, Heart, User } from 'lucide-react';
+  1453→import { cn } from '@/lib/utils/cn';
+  1454→
+  1455→const NAV_ITEMS = [
+  1456→  { label: 'Home', icon: Home, href: '/home' },
+  1457→  { label: 'Guide', icon: Compass, href: '/guide' },
+  1458→  { label: 'Favorites', icon: Heart, href: '/favorites' },
+  1459→  { label: 'Profile', icon: User, href: '/profile' },
+  1460→];
+  1461→
+  1462→export function BottomNav() {
+  1463→  const pathname = usePathname();
+  1464→
+  1465→  return (
+  1466→    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 glass-premium border-t border-white/20">
+  1467→      <div className="flex items-center justify-around h-16">
+  1468→        {NAV_ITEMS.map((item) => {
+  1469→          const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+  1470→          return (
+  1471→            <Link
+  1472→              key={item.href}
+  1473→              href={item.href}
+  1474→              className={cn(
+  1475→                'flex flex-col items-center justify-center gap-0.5 min-w-[64px] transition-all duration-200 relative',
+  1476→                isActive ? 'text-primary-600' : 'text-gray-400 hover:text-gray-600'
+  1477→              )}
+  1478→            >
+  1479→              <item.icon
+  1480→                className={cn(
+  1481→                  'w-5 h-5 transition-all duration-200',
+  1482→                  isActive && 'scale-110'
+  1483→                )}
+  1484→              />
+  1485→              <span className="text-[10px] font-medium">{item.label}</span>
+  1486→              {isActive && (
+  1487→                <span className="absolute -top-0.5 w-8 h-0.5 bg-gradient-to-r from-primary-500 to-secondary-500 rounded-full" />
+  1488→              )}
+  1489→            </Link>
+  1490→          );
+  1491→        })}
+  1492→      </div>
+  1493→    </nav>
+  1494→  );
+  1495→}
+  1496→components/layout/Sidebar.tsx
+  1497→typescript
+  1498→'use client';
+  1499→
+  1500→import Link from 'next/link';
+  1501→import { usePathname } from 'next/navigation';
+  1502→import { Home, Compass, Heart, User, Settings, Tv } from 'lucide-react';
+  1503→import { cn } from '@/lib/utils/cn';
+  1504→
+  1505→const NAV_ITEMS = [
+  1506→  { label: 'Home', icon: Home, href: '/home' },
+  1507→  { label: 'Guide', icon: Compass, href: '/guide' },
+  1508→  { label: 'Favorites', icon: Heart, href: '/favorites' },
+  1509→  { label: 'Profile', icon: User, href: '/profile' },
+  1510→];
+  1511→
+  1512→export function Sidebar() {
+  1513→  const pathname = usePathname();
+  1514→
+  1515→  return (
+  1516→    <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 lg:z-50 bg-white border-r border-gray-100">
+  1517→      <div className="flex-1 flex flex-col overflow-y-auto">
+  1518→        {/* Logo */}
+  1519→        <div className="flex items-center gap-2 px-6 py-6">
+  1520→          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center">
+  1521→            <Tv className="w-4 h-4 text-white" />
+  1522→          </div>
+  1523→          <span className="text-xl font-bold text-gray-900">GlassTV</span>
+  1524→        </div>
+  1525→
+  1526→        {/* Navigation */}
+  1527→        <nav className="flex-1 px-3 py-4 space-y-1">
+  1528→          {NAV_ITEMS.map((item) => {
+  1529→            const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+  1530→            return (
+  1531→              <Link
+  1532→                key={item.href}
+  1533→                href={item.href}
+  1534→                className={cn(
+  1535→                  'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium',
+  1536→                  isActive
+  1537→                    ? 'bg-primary-50 text-primary-600'
+  1538→                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+  1539→                )}
+  1540→              >
+  1541→                <item.icon className="w-5 h-5" />
+  1542→                {item.label}
+  1543→              </Link>
+  1544→            );
+  1545→          })}
+  1546→        </nav>
+  1547→
+  1548→        {/* Footer */}
+  1549→        <div className="px-3 py-4 border-t border-gray-100">
+  1550→          <Link
+  1551→            href="/settings"
+  1552→            className={cn(
+  1553→              'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium',
+  1554→              pathname === '/settings'
+  1555→                ? 'bg-primary-50 text-primary-600'
+  1556→                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+  1557→            )}
+  1558→          >
+  1559→            <Settings className="w-5 h-5" />
+  1560→            Settings
+  1561→          </Link>
+  1562→        </div>
+  1563→      </div>
+  1564→    </aside>
+  1565→  );
+  1566→}
+  1567→components/layout/Header.tsx
+  1568→typescript
+  1569→'use client';
+  1570→
+  1571→import { useSession, signOut } from 'next-auth/react';
+  1572→import { Search, Bell, LogOut } from 'lucide-react';
+  1573→import { GlassCard } from '@/components/ui/GlassCard';
+  1574→import { GlassButton } from '@/components/ui/GlassButton';
+  1575→
+  1576→export function Header() {
+  1577→  const { data: session } = useSession();
+  1578→
+  1579→  return (
+  1580→    <header className="sticky top-0 z-40 glass-premium border-b border-white/20">
+  1581→      <div className="flex items-center justify-between px-4 py-3">
+  1582→        <div className="flex items-center gap-4 flex-1">
+  1583→          <div className="relative flex-1 max-w-md">
+  1584→            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+  1585→            <input
+  1586→              type="text"
+  1587→              placeholder="Search channels..."
+  1588→              className="w-full pl-10 pr-4 py-2 bg-white/50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+  1589→            />
+  1590→          </div>
+  1591→        </div>
+  1592→
+  1593→        <div className="flex items-center gap-2">
+  1594→          <button className="p-2 rounded-xl hover:bg-gray-100 transition text-gray-600">
+  1595→            <Bell className="w-5 h-5" />
+  1596→          </button>
+  1597→          <div className="flex items-center gap-3 ml-2">
+  1598→            <span className="text-sm font-medium text-gray-700 hidden sm:inline">
+  1599→              {session?.user?.name || session?.user?.email}
+  1600→            </span>
+  1601→            <GlassButton
+  1602→              variant="secondary"
+  1603→              size="sm"
+  1604→              onClick={() => signOut()}
+  1605→              className="!p-2 !rounded-xl"
+  1606→            >
+  1607→              <LogOut className="w-4 h-4" />
+  1608→            </GlassButton>
+  1609→          </div>
+  1610→        </div>
+  1611→      </div>
+  1612→    </header>
+  1613→  );
+  1614→}
+  1615→14. UTILITY FUNCTIONS
+  1616→lib/utils/cn.ts
+  1617→typescript
+  1618→import { type ClassValue, clsx } from 'clsx';
+  1619→import { twMerge } from 'tailwind-merge';
+  1620→
+  1621→export function cn(...inputs: ClassValue[]) {
+  1622→  return twMerge(clsx(inputs));
+  1623→}
+  1624→15. API ROUTES
+  1625→app/api/auth/signup/route.ts
+  1626→typescript
+  1627→import { NextResponse } from 'next/server';
+  1628→import { db } from '@/lib/db';
+  1629→import { users } from '@/lib/db/schema';
+  1630→import { hash } from 'bcryptjs';
+  1631→
+  1632→export async function POST(req: Request) {
+  1633→  try {
+  1634→    const { name, email, password } = await req.json();
+  1635→
+  1636→    // Validate input
+  1637→    if (!email || !password || !name) {
+  1638→      return NextResponse.json(
+  1639→        { error: 'Missing required fields' },
+  1640→        { status: 400 }
+  1641→      );
+  1642→    }
+  1643→
+  1644→    // Check if user exists
+  1645→    const existingUser = await db
+  1646→      .select()
+  1647→      .from(users)
+  1648→      .where(eq(users.email, email))
+  1649→      .limit(1);
+  1650→
+  1651→    if (existingUser.length > 0) {
+  1652→      return NextResponse.json(
+  1653→        { error: 'User already exists' },
+  1654→        { status: 409 }
+  1655→      );
+  1656→    }
+  1657→
+  1658→    // Hash password and create user
+  1659→    const hashedPassword = await hash(password, 12);
+  1660→    
+  1661→    await db.insert(users).values({
+  1662→      id: crypto.randomUUID(),
+  1663→      email,
+  1664→      displayName: name,
+  1665→      password: hashedPassword,
+  1666→    });
+  1667→
+  1668→    return NextResponse.json(
+  1669→      { message: 'User created successfully' },
+  1670→      { status: 201 }
+  1671→    );
+  1672→  } catch (error) {
+  1673→    console.error('Signup error:', error);
+  1674→    return NextResponse.json(
+  1675→      { error: 'Internal server error' },
+  1676→      { status: 500 }
+  1677→    );
+  1678→  }
+  1679→}
+  1680→app/api/auth/login/route.ts
+  1681→typescript
+  1682→import { NextResponse } from 'next/server';
+  1683→import { db } from '@/lib/db';
+  1684→import { users } from '@/lib/db/schema';
+  1685→import { eq } from 'drizzle-orm';
+  1686→import { compare } from 'bcryptjs';
+  1687→import { signIn } from '@/lib/auth/auth';
+  1688→
+  1689→export async function POST(req: Request) {
+  1690→  try {
+  1691→    const { email, password } = await req.json();
+  1692→
+  1693→    // Validate input
+  1694→    if (!email || !password) {
+  1695→      return NextResponse.json(
+  1696→        { error: 'Missing email or password' },
+  1697→        { status: 400 }
+  1698→      );
+  1699→    }
+  1700→
+  1701→    // Find user
+  1702→    const user = await db
+  1703→      .select()
+  1704→      .from(users)
+  1705→      .where(eq(users.email, email))
+  1706→      .limit(1);
+  1707→
+  1708→    if (user.length === 0) {
+  1709→      return NextResponse.json(
+  1710→        { error: 'Invalid credentials' },
+  1711→        { status: 401 }
+  1712→      );
+  1713→    }
+  1714→
+  1715→    // Verify password
+  1716→    const isValid = await compare(password, user[0].password);
+  1717→    if (!isValid) {
+  1718→      return NextResponse.json(
+  1719→        { error: 'Invalid credentials' },
+  1720→        { status: 401 }
+  1721→      );
+  1722→    }
+  1723→
+  1724→    // Create session using NextAuth
+  1725→    await signIn('credentials', {
+  1726→      email,
+  1727→      password,
+  1728→      redirect: false,
+  1729→    });
+  1730→
+  1731→    return NextResponse.json(
+  1732→      { message: 'Login successful' },
+  1733→      { status: 200 }
+  1734→    );
+  1735→  } catch (error) {
+  1736→    console.error('Login error:', error);
+  1737→    return NextResponse.json(
+  1738→      { error: 'Internal server error' },
+  1739→      { status: 500 }
+  1740→    );
+  1741→  }
+  1742→}
+  1743→16. HOME PAGE
+  1744→app/(main)/home/page.tsx
+  1745→typescript
+  1746→import { auth } from '@/lib/auth/auth';
+  1747→import { db } from '@/lib/db';
+  1748→import { channels, watchHistory, userPreferences } from '@/lib/db/schema';
+  1749→import { eq } from 'drizzle-orm';
+  1750→import { GlassCard } from '@/components/ui/GlassCard';
+  1751→
+  1752→export default async function HomePage() {
+  1753→  const session = await auth();
+  1754→  
+  1755→  if (!session) return null;
+  1756→
+  1757→  // Fetch channels
+  1758→  const allChannels = await db
+  1759→    .select()
+  1760→    .from(channels)
+  1761→    .where(eq(channels.isVerified, true))
+  1762→    .limit(20);
+  1763→
+  1764→  // Fetch user preferences for personalization
+  1765→  const preferences = await db
+  1766→    .select()
+  1767→    .from(userPreferences)
+  1768→    .where(eq(userPreferences.userId, session.user.id))
+  1769→    .limit(1);
+  1770→
+  1771→  return (
+  1772→    <div className="space-y-8">
+  1773→      {/* Welcome Section */}
+  1774→      <div className="bg-gradient-to-br from-warm-beige to-gray-50 rounded-3xl p-8">
+  1775→        <h1 className="text-3xl font-bold text-gray-900">
+  1776→          Good {new Date().getHours() < 12 ? 'Morning' : 'Evening'}, {session.user.name || 'TV Lover'}! 👋
+  1777→        </h1>
+  1778→        <p className="text-gray-600 mt-1">
+  1779→          {preferences.length > 0 
+  1780→            ? 'Your personalized channels are ready'
+  1781→            : 'Let\'s find something great for you to watch'}
+  1782→        </p>
+  1783→      </div>
+  1784→
+  1785→      {/* Continue Watching */}
+  1786→      <section>
+  1787→        <h2 className="text-xl font-semibold text-gray-900 mb-4">Continue Watching</h2>
+  1788→        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+  1789→          {/* Placeholder cards - will be populated with real data in Phase 2 */}
+  1790→          {[1, 2, 3, 4].map((i) => (
+  1791→            <GlassCard key={i} variant="solid" className="p-4 text-center">
+  1792→              <div className="aspect-video bg-gray-200 rounded-xl mb-3" />
+  1793→              <p className="font-medium text-gray-700">Channel {i}</p>
+  1794→            </GlassCard>
+  1795→          ))}
+  1796→        </div>
+  1797→      </section>
+  1798→
+  1799→      {/* All Channels */}
+  1800→      <section>
+  1801→        <h2 className="text-xl font-semibold text-gray-900 mb-4">All Channels</h2>
+  1802→        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+  1803→          {allChannels.map((channel) => (
+  1804→            <GlassCard key={channel.id} variant="solid" hoverable className="p-4 cursor-pointer">
+  1805→              {channel.logoUrl ? (
+  1806→                <img
+  1807→                  src={channel.logoUrl}
+  1808→                  alt={channel.name}
+  1809→                  className="w-full h-20 object-contain mb-3"
+  1810→                />
+  1811→              ) : (
+  1812→                <div className="w-full h-20 bg-gray-100 rounded-xl flex items-center justify-center mb-3">
+  1813→                  <span className="text-2xl">📺</span>
+  1814→                </div>
+  1815→              )}
+  1816→              <p className="font-medium text-gray-800 text-sm truncate">{channel.name}</p>
+  1817→              {channel.category && (
+  1818→                <p className="text-xs text-gray-400">{channel.category}</p>
+  1819→              )}
+  1820→            </GlassCard>
+  1821→          ))}
+  1822→        </div>
+  1823→      </section>
+  1824→    </div>
+  1825→  );
+  1826→}
+  1827→17. ROOT LAYOUT
+  1828→app/layout.tsx
+  1829→typescript
+  1830→import type { Metadata } from 'next';
+  1831→import { Inter } from 'next/font/google';
+  1832→import './globals.css';
+  1833→import { SessionProvider } from 'next-auth/react';
+  1834→
+  1835→const inter = Inter({ subsets: ['latin'] });
+  1836→
+  1837→export const metadata: Metadata = {
+  1838→  title: 'GlassTV - AI-Powered IPTV',
+  1839→  description: 'Watch live TV with AI subtitles and personalized recommendations',
+  1840→};
+  1841→
+  1842→export default function RootLayout({
+  1843→  children,
+  1844→}: {
+  1845→  children: React.ReactNode;
+  1846→}) {
+  1847→  return (
+  1848→    <html lang="en">
+  1849→      <body className={inter.className}>
+  1850→        <SessionProvider>
+  1851→          {children}
+  1852→        </SessionProvider>
+  1853→      </body>
+  1854→    </html>
+  1855→  );
+  1856→}
+  1857→18. POSTCSS CONFIG
+  1858→postcss.config.mjs
+  1859→javascript
+  1860→export default {
+  1861→  plugins: {
+  1862→    '@tailwindcss/postcss': {},
+  1863→    autoprefixer: {},
+  1864→  },
+  1865→};
+  1866→19. NEXT.JS CONFIG
+  1867→next.config.js
+  1868→javascript
+  1869→/** @type {import('next').NextConfig} */
+  1870→const nextConfig = {
+  1871→  experimental: {
+  1872→    optimizePackageImports: ['lucide-react'],
+  1873→  },
+  1874→  images: {
+  1875→    remotePatterns: [
+  1876→      {
+  1877→        protocol: 'https',
+  1878→        hostname: '**',
+  1879→      },
+  1880→    ],
+  1881→  },
+  1882→  typescript: {
+  1883→    ignoreBuildErrors: false,
+  1884→  },
+  1885→  eslint: {
+  1886→    ignoreDuringBuilds: false,
+  1887→  },
+  1888→};
+  1889→
+  1890→export default nextConfig;
+  1891→20. VERIFICATION CHECKLIST
+  1892→After the AI generates the code, verify:
+  1893→
+  1894→□ npm install completes without errors
+  1895→□ npx drizzle-kit push:pg creates the database tables in Neon
+  1896→□ npm run dev starts the development server
+  1897→□ /login page loads with the glassmorphism design
+  1898→□ /signup page loads correctly
+  1899→□ User can create an account
+  1900→□ User can log in
+  1901→□ After login, redirected to /onboarding
+  1902→□ Onboarding flow works (genres → languages → habits → recommendations)
+  1903→□ Onboarding data is saved to the database
+  1904→□ /home page loads with the channel grid
+  1905→□ Mobile bottom nav appears on small screens
+  1906→□ Desktop sidebar appears on large screens

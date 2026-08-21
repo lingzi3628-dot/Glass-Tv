@@ -1,0 +1,1906 @@
+I am building a hybrid web + native IPTV application called GlassTV. Please generate the complete Phase 1 foundation code for me.
+
+PROJECT GOAL FOR PHASE 1
+Build the foundational layer of GlassTV including:
+
+Next.js 15 project setup with App Router
+
+Neon PostgreSQL database connection with Drizzle ORM
+
+Authentication system (using Neon Auth or Auth.js)
+
+AI Onboarding conversational flow
+
+Database schema with all tables
+
+Tailwind CSS with our custom design system
+
+Basic layout with navigation (mobile bottom nav + desktop sidebar)
+
+TECHNICAL STACK
+Layer	Technology
+Framework	Next.js 15 (App Router), React 19
+Database	Neon (Postgres)
+ORM	Drizzle ORM
+Authentication	Neon Auth (preferred) or Auth.js (NextAuth v5)
+Styling	Tailwind CSS v4
+State Management	Zustand
+UI Animations	Framer Motion
+1. PROJECT STRUCTURE
+Create the following folder structure:
+
+text
+glass-tv/
+├── app/
+│   ├── (auth)/
+│   │   ├── login/
+│   │   │   └── page.tsx
+│   │   ├── signup/
+│   │   │   └── page.tsx
+│   │   ├── onboarding/
+│   │   │   └── page.tsx
+│   │   └── layout.tsx
+│   ├── (main)/
+│   │   ├── home/
+│   │   │   └── page.tsx
+│   │   ├── guide/
+│   │   │   └── page.tsx
+│   │   ├── favorites/
+│   │   │   └── page.tsx
+│   │   ├── profile/
+│   │   │   └── page.tsx
+│   │   └── layout.tsx
+│   ├── api/
+│   │   ├── auth/
+│   │   │   └── [...nextauth]/
+│   │   │       └── route.ts
+│   │   ├── channels/
+│   │   │   └── route.ts
+│   │   ├── onboarding/
+│   │   │   └── route.ts
+│   │   └── preferences/
+│   │       └── route.ts
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx
+├── components/
+│   ├── auth/
+│   │   ├── LoginForm.tsx
+│   │   ├── SignupForm.tsx
+│   │   └── OnboardingFlow.tsx
+│   ├── layout/
+│   │   ├── BottomNav.tsx
+│   │   ├── Sidebar.tsx
+│   │   ├── Header.tsx
+│   │   └── AuthGuard.tsx
+│   └── ui/
+│       ├── GlassCard.tsx
+│       ├── GlassButton.tsx
+│       ├── GlassInput.tsx
+│       └── GradientButton.tsx
+├── lib/
+│   ├── db/
+│   │   ├── index.ts
+│   │   ├── schema.ts
+│   │   └── migrations/
+│   ├── auth/
+│   │   ├── auth.ts
+│   │   └── auth.config.ts
+│   ├── store/
+│   │   ├── userStore.ts
+│   │   └── onboardingStore.ts
+│   └── utils/
+│       └── cn.ts
+├── drizzle.config.ts
+├── tailwind.config.ts
+├── next.config.js
+├── .env.local
+└── package.json
+2. DEPENDENCIES
+Add these to package.json:
+
+json
+{
+  "dependencies": {
+    "next": "15.0.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "@neondatabase/serverless": "^0.9.0",
+    "drizzle-orm": "^0.33.0",
+    "@auth/core": "^0.37.0",
+    "@auth/pg-adapter": "^0.1.0",
+    "next-auth": "^5.0.0-beta.20",
+    "zod": "^3.23.8",
+    "zustand": "^5.0.0",
+    "framer-motion": "^11.0.0",
+    "lucide-react": "^0.468.0",
+    "tailwind-merge": "^2.5.0",
+    "clsx": "^2.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.0.0",
+    "tailwindcss": "^4.0.0",
+    "@tailwindcss/postcss": "^4.0.0",
+    "postcss": "^8.0.0",
+    "autoprefixer": "^10.0.0",
+    "drizzle-kit": "^0.22.0"
+  }
+}
+3. ENVIRONMENT VARIABLES (.env.local)
+env
+# Database (Neon)
+DATABASE_URL=postgresql://your-neon-connection-string
+
+# Authentication
+NEXTAUTH_SECRET=your-secret-key
+NEXTAUTH_URL=http://localhost:3000
+
+# Neon Auth (if using Neon Auth)
+NEXT_PUBLIC_NEON_AUTH_URL=https://your-neon-auth-url
+NEXT_PUBLIC_NEON_AUTH_API_KEY=your-neon-auth-api-key
+
+# Environment
+NODE_ENV=development
+4. DATABASE SCHEMA (Drizzle ORM)
+Generate lib/db/schema.ts with the following tables:
+
+typescript
+import { pgTable, text, timestamp, integer, jsonb, boolean, primaryKey, serial } from 'drizzle-orm/pg-core';
+import { relations } from 'drizzle-orm';
+
+// Users - synced from Neon Auth or managed via NextAuth
+export const users = pgTable('users', {
+  id: text('id').primaryKey(),
+  email: text('email').notNull().unique(),
+  displayName: text('display_name'),
+  avatar: text('avatar'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+  deletedAt: timestamp('deleted_at'), // Soft delete
+});
+
+// User Preferences (AI Onboarding data)
+export const userPreferences = pgTable('user_preferences', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  preferredGenres: text('preferred_genres').array(),
+  preferredLanguages: text('preferred_languages').array(),
+  favoriteCategories: text('favorite_categories').array(),
+  viewingTime: text('viewing_time'), // morning, afternoon, evening, late_night
+  viewingDevice: text('viewing_device'), // phone, tablet, tv, computer
+  onboardingCompleted: boolean('onboarding_completed').default(false),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Channels (cached from IPTV playlists)
+export const channels = pgTable('channels', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  logoUrl: text('logo_url'),
+  streamUrl: text('stream_url').notNull(),
+  category: text('category'),
+  country: text('country'),
+  language: text('language'),
+  isVerified: boolean('is_verified').default(false),
+  lastUpdated: timestamp('last_updated').defaultNow(),
+});
+
+// Favorites
+export const favorites = pgTable('favorites', {
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  channelId: text('channel_id')
+    .notNull()
+    .references(() => channels.id, { onDelete: 'cascade' }),
+  addedAt: timestamp('added_at').defaultNow(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.channelId] }),
+}));
+
+// Watch History
+export const watchHistory = pgTable('watch_history', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  channelId: text('channel_id')
+    .notNull()
+    .references(() => channels.id, { onDelete: 'cascade' }),
+  watchedAt: timestamp('watched_at').defaultNow(),
+  durationSeconds: integer('duration_seconds'),
+});
+
+// AI Captions Cache
+export const captionsCache = pgTable('captions_cache', {
+  id: serial('id').primaryKey(),
+  channelId: text('channel_id')
+    .notNull()
+    .references(() => channels.id, { onDelete: 'cascade' }),
+  timestamp: integer('timestamp').notNull(),
+  text: text('text').notNull(),
+  language: text('language').default('en'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  unique: { columns: [table.channelId, table.timestamp] },
+}));
+
+// Relations
+export const usersRelations = relations(users, ({ many }) => ({
+  preferences: many(userPreferences),
+  favorites: many(favorites),
+  history: many(watchHistory),
+}));
+
+export const channelsRelations = relations(channels, ({ many }) => ({
+  favorites: many(favorites),
+  history: many(watchHistory),
+  captions: many(captionsCache),
+}));
+Generate lib/db/index.ts:
+
+typescript
+import { neon } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-http';
+import * as schema from './schema';
+
+const sql = neon(process.env.DATABASE_URL!);
+export const db = drizzle(sql, { schema });
+
+export * from './schema';
+Generate drizzle.config.ts:
+
+typescript
+import { defineConfig } from 'drizzle-kit';
+
+export default defineConfig({
+  dialect: 'postgresql',
+  schema: './lib/db/schema.ts',
+  out: './lib/db/migrations',
+  dbCredentials: {
+    url: process.env.DATABASE_URL!,
+  },
+});
+5. AUTHENTICATION SETUP
+Option A: Neon Auth (Recommended)
+If using Neon Auth, the users are automatically synced to neon_auth.users_sync. You just need to query that table.
+
+Create lib/auth/auth.ts:
+
+typescript
+import { neon } from '@neondatabase/serverless';
+import { db } from '@/lib/db';
+
+// Get user by email from neon_auth.users_sync
+export async function getUserByEmail(email: string) {
+  const result = await db.execute(
+    'SELECT * FROM neon_auth.users_sync WHERE email = $1 AND deleted_at IS NULL',
+    [email]
+  );
+  return result.rows[0] || null;
+}
+
+// Get user preferences
+export async function getUserPreferences(userId: string) {
+  const [preferences] = await db
+    .select()
+    .from(userPreferences)
+    .where(eq(userPreferences.userId, userId));
+  return preferences;
+}
+Option B: Auth.js (NextAuth v5)
+Create lib/auth/auth.ts:
+
+typescript
+import NextAuth from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import { db } from '@/lib/db';
+import { users } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
+import { compare } from 'bcryptjs';
+
+export const { handlers, signIn, signOut, auth } = NextAuth({
+  providers: [
+    CredentialsProvider({
+      name: 'Credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null;
+
+        const user = await db
+          .select()
+          .from(users)
+          .where(eq(users.email, credentials.email as string))
+          .limit(1);
+
+        if (!user[0]) return null;
+
+        const isValid = await compare(
+          credentials.password as string,
+          user[0].password
+        );
+
+        if (!isValid) return null;
+
+        return {
+          id: user[0].id,
+          email: user[0].email,
+          name: user[0].displayName,
+        };
+      },
+    }),
+  ],
+  pages: {
+    signIn: '/login',
+    signUp: '/signup',
+  },
+  callbacks: {
+    async session({ session, token }) {
+      if (token.sub) {
+        session.user.id = token.sub;
+      }
+      return session;
+    },
+    async jwt({ token, user }) {
+      if (user) {
+        token.sub = user.id;
+      }
+      return token;
+    },
+  },
+});
+Create app/api/auth/[...nextauth]/route.ts:
+
+typescript
+import { handlers } from '@/lib/auth/auth';
+export const { GET, POST } = handlers;
+6. TAILWIND DESIGN SYSTEM
+Generate tailwind.config.ts:
+
+typescript
+import type { Config } from 'tailwindcss';
+
+const config: Config = {
+  content: [
+    './pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './components/**/*.{js,ts,jsx,tsx,mdx}',
+    './app/**/*.{js,ts,jsx,tsx,mdx}',
+  ],
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          50: '#EEF2FF',
+          100: '#E0E7FF',
+          200: '#C7D2FE',
+          300: '#A5B4FC',
+          400: '#818CF8',
+          500: '#6366F1',
+          600: '#4F46E5', // Primary
+          700: '#4338CA',
+          800: '#3730A3',
+          900: '#312E81',
+          950: '#1E1B4B',
+        },
+        secondary: {
+          50: '#F5F3FF',
+          100: '#EDE9FE',
+          200: '#DDD6FE',
+          300: '#C4B5FD',
+          400: '#A78BFA',
+          500: '#8B5CF6', // Secondary
+          600: '#7C3AED',
+          700: '#6D28D9',
+          800: '#5B21B6',
+          900: '#4C1D95',
+          950: '#2E1065',
+        },
+        warm: {
+          beige: '#FCF7F0',
+          wood: '#D4A373',
+          woodDark: '#B8896C',
+        },
+      },
+      borderRadius: {
+        '2xl': '1rem',
+        '3xl': '1.5rem',
+        '4xl': '2rem',
+      },
+      backdropBlur: {
+        xs: '4px',
+        sm: '8px',
+        md: '16px',
+        lg: '24px',
+        xl: '40px',
+      },
+      animation: {
+        'slide-up': 'slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+        'slide-down': 'slideDown 0.3s ease-out forwards',
+        'fade-in': 'fadeIn 0.3s ease-out forwards',
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      },
+      keyframes: {
+        slideUp: {
+          from: { opacity: '0', transform: 'translateY(40px) scale(0.95)' },
+          to: { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
+        slideDown: {
+          from: { opacity: '1', transform: 'translateY(0)' },
+          to: { opacity: '0', transform: 'translateY(20px)' },
+        },
+        fadeIn: {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+      },
+    },
+  },
+  plugins: [],
+};
+
+export default config;
+Generate app/globals.css:
+
+css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #F9FAFB;
+    --foreground: #111827;
+    --card: #FFFFFF;
+    --primary: #4F46E5;
+    --secondary: #8B5CF6;
+  }
+
+  * {
+    @apply border-gray-200;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  /* Glassmorphism Utility - Accent Only */
+  .glass-premium {
+    @apply bg-white/70 backdrop-blur-xl border border-white/30 shadow-lg;
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+  }
+
+  .glass-dark {
+    @apply bg-black/40 backdrop-blur-xl border border-white/10 shadow-xl;
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+  }
+
+  /* Solid Cards - Primary Style */
+  .card-solid {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 transition-all duration-300;
+  }
+
+  .card-solid:hover {
+    @apply shadow-lg border-gray-200;
+  }
+
+  .card-solid-accent {
+    @apply bg-white rounded-2xl shadow-sm border-l-4 border-primary-600 transition-all duration-300;
+  }
+
+  /* Gradient Buttons */
+  .btn-gradient {
+    @apply bg-gradient-to-r from-primary-600 to-secondary-500 text-white font-semibold 
+           rounded-xl px-6 py-3 transition-all duration-300 
+           hover:scale-105 hover:shadow-lg hover:shadow-primary-500/30 
+           active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-gradient-sm {
+    @apply bg-gradient-to-r from-primary-600 to-secondary-500 text-white font-medium 
+           rounded-lg px-4 py-2 transition-all duration-300 
+           hover:scale-105 hover:shadow-md hover:shadow-primary-500/25 
+           active:scale-95;
+  }
+
+  /* Focus Rings for Smart TV */
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-4 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white;
+  }
+}
+7. UI COMPONENTS
+components/ui/GlassCard.tsx
+typescript
+import { cn } from '@/lib/utils/cn';
+import { forwardRef, HTMLAttributes } from 'react';
+
+interface GlassCardProps extends HTMLAttributes<HTMLDivElement> {
+  variant?: 'premium' | 'dark' | 'solid';
+  hoverable?: boolean;
+}
+
+export const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(
+  ({ className, variant = 'solid', hoverable = true, children, ...props }, ref) => {
+    const variants = {
+      premium: 'glass-premium',
+      dark: 'glass-dark',
+      solid: 'card-solid',
+    };
+
+    return (
+      <div
+        ref={ref}
+        className={cn(
+          variants[variant],
+          hoverable && 'transition-all duration-300 hover:scale-[1.02]',
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </div>
+    );
+  }
+);
+GlassCard.displayName = 'GlassCard';
+components/ui/GlassButton.tsx
+typescript
+import { cn } from '@/lib/utils/cn';
+import { ButtonHTMLAttributes, forwardRef } from 'react';
+
+interface GlassButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'primary' | 'secondary' | 'glass' | 'gradient';
+  size?: 'sm' | 'md' | 'lg';
+}
+
+export const GlassButton = forwardRef<HTMLButtonElement, GlassButtonProps>(
+  ({ className, variant = 'primary', size = 'md', children, ...props }, ref) => {
+    const variants = {
+      primary: 'bg-primary-600 text-white hover:bg-primary-700 focus-ring',
+      secondary: 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 focus-ring',
+      glass: 'glass-premium text-gray-700 hover:bg-white/80 focus-ring',
+      gradient: 'btn-gradient',
+    };
+
+    const sizes = {
+      sm: 'px-4 py-2 text-sm rounded-lg',
+      md: 'px-6 py-3 text-base rounded-xl',
+      lg: 'px-8 py-4 text-lg rounded-2xl',
+    };
+
+    return (
+      <button
+        ref={ref}
+        className={cn(
+          'font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95',
+          variants[variant],
+          sizes[size],
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </button>
+    );
+  }
+);
+GlassButton.displayName = 'GlassButton';
+components/ui/GlassInput.tsx
+typescript
+import { cn } from '@/lib/utils/cn';
+import { InputHTMLAttributes, forwardRef } from 'react';
+
+interface GlassInputProps extends InputHTMLAttributes<HTMLInputElement> {
+  label?: string;
+  error?: string;
+}
+
+export const GlassInput = forwardRef<HTMLInputElement, GlassInputProps>(
+  ({ className, label, error, ...props }, ref) => {
+    return (
+      <div className="space-y-1.5">
+        {label && (
+          <label className="block text-sm font-medium text-gray-700">
+            {label}
+          </label>
+        )}
+        <input
+          ref={ref}
+          className={cn(
+            'w-full px-4 py-3 bg-white border border-gray-200 rounded-xl',
+            'placeholder:text-gray-400 text-gray-900',
+            'transition-all duration-200',
+            'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent',
+            error && 'border-red-500 focus:ring-red-500',
+            className
+          )}
+          {...props}
+        />
+        {error && (
+          <p className="text-sm text-red-500">{error}</p>
+        )}
+      </div>
+    );
+  }
+);
+GlassInput.displayName = 'GlassInput';
+components/ui/GradientButton.tsx
+typescript
+import { cn } from '@/lib/utils/cn';
+import { ButtonHTMLAttributes, forwardRef } from 'react';
+
+interface GradientButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  size?: 'sm' | 'md' | 'lg';
+}
+
+export const GradientButton = forwardRef<HTMLButtonElement, GradientButtonProps>(
+  ({ className, size = 'md', children, ...props }, ref) => {
+    const sizes = {
+      sm: 'btn-gradient-sm',
+      md: 'btn-gradient',
+      lg: 'btn-gradient text-lg px-8 py-4 rounded-2xl',
+    };
+
+    return (
+      <button
+        ref={ref}
+        className={cn(
+          sizes[size],
+          'focus-ring',
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </button>
+    );
+  }
+);
+GradientButton.displayName = 'GradientButton';
+8. AUTHENTICATION PAGES
+app/(auth)/login/page.tsx
+typescript
+import { LoginForm } from '@/components/auth/LoginForm';
+import { GlassCard } from '@/components/ui/GlassCard';
+import Link from 'next/link';
+
+export default function LoginPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-warm-beige p-4">
+      <GlassCard variant="premium" className="w-full max-w-md p-8 space-y-6">
+        <div className="text-center space-y-2">
+          <h1 className="text-3xl font-bold text-gray-900">Welcome to GlassTV</h1>
+          <p className="text-gray-500">Sign in to start watching</p>
+        </div>
+
+        <LoginForm />
+
+        <p className="text-center text-sm text-gray-500">
+          Don't have an account?{' '}
+          <Link href="/signup" className="text-primary-600 font-semibold hover:underline">
+            Sign up
+          </Link>
+        </p>
+      </GlassCard>
+    </div>
+  );
+}
+app/(auth)/signup/page.tsx
+typescript
+import { SignupForm } from '@/components/auth/SignupForm';
+import { GlassCard } from '@/components/ui/GlassCard';
+import Link from 'next/link';
+
+export default function SignupPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-warm-beige p-4">
+      <GlassCard variant="premium" className="w-full max-w-md p-8 space-y-6">
+        <div className="text-center space-y-2">
+          <h1 className="text-3xl font-bold text-gray-900">Create Account</h1>
+          <p className="text-gray-500">Start your personalized TV experience</p>
+        </div>
+
+        <SignupForm />
+
+        <p className="text-center text-sm text-gray-500">
+          Already have an account?{' '}
+          <Link href="/login" className="text-primary-600 font-semibold hover:underline">
+            Sign in
+          </Link>
+        </p>
+      </GlassCard>
+    </div>
+  );
+}
+9. AUTHENTICATION COMPONENTS
+components/auth/LoginForm.tsx
+typescript
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { GlassInput } from '@/components/ui/GlassInput';
+import { GradientButton } from '@/components/ui/GradientButton';
+
+export function LoginForm() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    const formData = new FormData(e.currentTarget);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Login failed');
+      }
+
+      router.push('/onboarding');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+          {error}
+        </div>
+      )}
+
+      <GlassInput
+        name="email"
+        type="email"
+        label="Email"
+        placeholder="you@example.com"
+        required
+        disabled={loading}
+      />
+
+      <GlassInput
+        name="password"
+        type="password"
+        label="Password"
+        placeholder="••••••••"
+        required
+        disabled={loading}
+      />
+
+      <GradientButton type="submit" className="w-full" disabled={loading}>
+        {loading ? 'Signing in...' : 'Sign In'}
+      </GradientButton>
+    </form>
+  );
+}
+components/auth/SignupForm.tsx
+typescript
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { GlassInput } from '@/components/ui/GlassInput';
+import { GradientButton } from '@/components/ui/GradientButton';
+
+export function SignupForm() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    const formData = new FormData(e.currentTarget);
+    const name = formData.get('name') as string;
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+    const confirmPassword = formData.get('confirmPassword') as string;
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Signup failed');
+      }
+
+      router.push('/onboarding');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+          {error}
+        </div>
+      )}
+
+      <GlassInput
+        name="name"
+        type="text"
+        label="Display Name"
+        placeholder="Your Name"
+        required
+        disabled={loading}
+      />
+
+      <GlassInput
+        name="email"
+        type="email"
+        label="Email"
+        placeholder="you@example.com"
+        required
+        disabled={loading}
+      />
+
+      <GlassInput
+        name="password"
+        type="password"
+        label="Password"
+        placeholder="••••••••"
+        required
+        disabled={loading}
+      />
+
+      <GlassInput
+        name="confirmPassword"
+        type="password"
+        label="Confirm Password"
+        placeholder="••••••••"
+        required
+        disabled={loading}
+      />
+
+      <GradientButton type="submit" className="w-full" disabled={loading}>
+        {loading ? 'Creating Account...' : 'Create Account'}
+      </GradientButton>
+    </form>
+  );
+}
+10. ONBOARDING COMPONENT
+components/auth/OnboardingFlow.tsx
+typescript
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { GlassCard } from '@/components/ui/GlassCard';
+import { GradientButton } from '@/components/ui/GradientButton';
+import { GlassButton } from '@/components/ui/GlassButton';
+import { cn } from '@/lib/utils/cn';
+import { useOnboardingStore } from '@/lib/store/onboardingStore';
+
+const GENRES = [
+  { id: 'sports', label: '⚽ Sports', icon: '🏃' },
+  { id: 'news', label: '📰 News', icon: '📡' },
+  { id: 'movies', label: '🎬 Movies', icon: '🎞️' },
+  { id: 'documentaries', label: '📽️ Documentaries', icon: '🌍' },
+  { id: 'kids', label: '🧒 Kids', icon: '🧸' },
+  { id: 'music', label: '🎵 Music', icon: '🎶' },
+  { id: 'lifestyle', label: '🌿 Lifestyle', icon: '✨' },
+  { id: 'international', label: '🌐 International', icon: '🌍' },
+];
+
+const LANGUAGES = [
+  { id: 'en', label: 'English' },
+  { id: 'es', label: 'Spanish' },
+  { id: 'fr', label: 'French' },
+  { id: 'de', label: 'German' },
+  { id: 'ar', label: 'Arabic' },
+  { id: 'hi', label: 'Hindi' },
+  { id: 'pt', label: 'Portuguese' },
+];
+
+const VIEWING_TIMES = [
+  { id: 'morning', label: '🌅 Morning' },
+  { id: 'afternoon', label: '☀️ Afternoon' },
+  { id: 'evening', label: '🌆 Evening' },
+  { id: 'late_night', label: '🌙 Late Night' },
+];
+
+const VIEWING_DEVICES = [
+  { id: 'phone', label: '📱 Phone' },
+  { id: 'tablet', label: '📱 Tablet' },
+  { id: 'tv', label: '🖥️ TV' },
+  { id: 'computer', label: '💻 Computer' },
+];
+
+type Step = 'welcome' | 'genres' | 'languages' | 'habits' | 'recommendations' | 'complete';
+
+export function OnboardingFlow() {
+  const router = useRouter();
+  const [step, setStep] = useState<Step>('welcome');
+  const [loading, setLoading] = useState(false);
+  const [recommendations, setRecommendations] = useState<string[]>([]);
+
+  const {
+    selectedGenres,
+    selectedLanguages,
+    viewingTime,
+    viewingDevice,
+    toggleGenre,
+    toggleLanguage,
+    setViewingTime,
+    setViewingDevice,
+    reset,
+  } = useOnboardingStore();
+
+  const handleNext = () => {
+    const steps: Step[] = ['welcome', 'genres', 'languages', 'habits', 'recommendations', 'complete'];
+    const currentIndex = steps.indexOf(step);
+    if (currentIndex < steps.length - 1) {
+      setStep(steps[currentIndex + 1]);
+    }
+  };
+
+  const handleBack = () => {
+    const steps: Step[] = ['welcome', 'genres', 'languages', 'habits', 'recommendations', 'complete'];
+    const currentIndex = steps.indexOf(step);
+    if (currentIndex > 0) {
+      setStep(steps[currentIndex - 1]);
+    }
+  };
+
+  const handleGetRecommendations = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/onboarding/recommendations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          genres: selectedGenres,
+          languages: selectedLanguages,
+          viewingTime,
+          viewingDevice,
+        }),
+      });
+      const data = await response.json();
+      setRecommendations(data.channelIds || []);
+      handleNext();
+    } catch (error) {
+      console.error('Failed to get recommendations:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleComplete = async () => {
+    setLoading(true);
+    try {
+      await fetch('/api/onboarding/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          genres: selectedGenres,
+          languages: selectedLanguages,
+          viewingTime,
+          viewingDevice,
+        }),
+      });
+      router.push('/home');
+    } catch (error) {
+      console.error('Failed to complete onboarding:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step rendering
+  const renderStep = () => {
+    switch (step) {
+      case 'welcome':
+        return (
+          <div className="text-center space-y-6">
+            <div className="space-y-3">
+              <h2 className="text-2xl font-bold text-gray-900">Welcome to GlassTV! 👋</h2>
+              <p className="text-gray-500 text-lg">
+                Let's personalize your TV experience in just a few steps.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-sm text-gray-600">
+              <div className="p-3 bg-gray-50 rounded-xl">
+                <span className="block text-2xl mb-1">🎯</span>
+                Your interests
+              </div>
+              <div className="p-3 bg-gray-50 rounded-xl">
+                <span className="block text-2xl mb-1">🌍</span>
+                Your languages
+              </div>
+              <div className="p-3 bg-gray-50 rounded-xl">
+                <span className="block text-2xl mb-1">✨</span>
+                AI recommendations
+              </div>
+            </div>
+            <GradientButton onClick={handleNext} className="w-full">
+              Get Started
+            </GradientButton>
+          </div>
+        );
+
+      case 'genres':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">What do you love watching?</h2>
+              <p className="text-gray-500">Select 3-5 genres that interest you</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {GENRES.map((genre) => (
+                <button
+                  key={genre.id}
+                  onClick={() => toggleGenre(genre.id)}
+                  className={cn(
+                    'p-4 rounded-2xl border-2 transition-all duration-200 text-left',
+                    selectedGenres.includes(genre.id)
+                      ? 'border-primary-500 bg-primary-50 text-primary-700'
+                      : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+                  )}
+                >
+                  <span className="text-2xl block">{genre.icon}</span>
+                  <span className="font-medium text-sm">{genre.label}</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <GlassButton variant="secondary" onClick={handleBack}>
+                Back
+              </GlassButton>
+              <GradientButton
+                onClick={handleNext}
+                className="flex-1"
+                disabled={selectedGenres.length < 3}
+              >
+                Next ({selectedGenres.length}/3)
+              </GradientButton>
+            </div>
+          </div>
+        );
+
+      case 'languages':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">What languages do you speak?</h2>
+              <p className="text-gray-500">Select all that apply</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {LANGUAGES.map((lang) => (
+                <button
+                  key={lang.id}
+                  onClick={() => toggleLanguage(lang.id)}
+                  className={cn(
+                    'p-4 rounded-2xl border-2 transition-all duration-200 text-center',
+                    selectedLanguages.includes(lang.id)
+                      ? 'border-primary-500 bg-primary-50 text-primary-700'
+                      : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+                  )}
+                >
+                  <span className="font-medium">{lang.label}</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <GlassButton variant="secondary" onClick={handleBack}>
+                Back
+              </GlassButton>
+              <GradientButton
+                onClick={handleNext}
+                className="flex-1"
+                disabled={selectedLanguages.length === 0}
+              >
+                Next
+              </GradientButton>
+            </div>
+          </div>
+        );
+
+      case 'habits':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Your viewing habits</h2>
+              <p className="text-gray-500">Help us understand your routine</p>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-3">When do you usually watch?</p>
+              <div className="grid grid-cols-2 gap-3">
+                {VIEWING_TIMES.map((time) => (
+                  <button
+                    key={time.id}
+                    onClick={() => setViewingTime(time.id)}
+                    className={cn(
+                      'p-4 rounded-2xl border-2 transition-all duration-200 text-center',
+                      viewingTime === time.id
+                        ? 'border-primary-500 bg-primary-50 text-primary-700'
+                        : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+                    )}
+                  >
+                    <span className="font-medium">{time.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-3">What device do you use most?</p>
+              <div className="grid grid-cols-2 gap-3">
+                {VIEWING_DEVICES.map((device) => (
+                  <button
+                    key={device.id}
+                    onClick={() => setViewingDevice(device.id)}
+                    className={cn(
+                      'p-4 rounded-2xl border-2 transition-all duration-200 text-center',
+                      viewingDevice === device.id
+                        ? 'border-primary-500 bg-primary-50 text-primary-700'
+                        : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+                    )}
+                  >
+                    <span className="font-medium">{device.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <GlassButton variant="secondary" onClick={handleBack}>
+                Back
+              </GlassButton>
+              <GradientButton
+                onClick={handleGetRecommendations}
+                className="flex-1"
+                disabled={!viewingTime || !viewingDevice}
+              >
+                {loading ? 'Generating...' : 'Get Recommendations ✨'}
+              </GradientButton>
+            </div>
+          </div>
+        );
+
+      case 'recommendations':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">We think you'll love these ✨</h2>
+              <p className="text-gray-500">AI-selected channels based on your preferences</p>
+            </div>
+            <div className="space-y-3">
+              {recommendations.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <div className="text-4xl mb-2">🤔</div>
+                  <p>No recommendations yet. Let's find something for you!</p>
+                </div>
+              ) : (
+                recommendations.map((channelId, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm"
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-primary-100 flex items-center justify-center text-primary-600 font-bold">
+                      {index + 1}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">Channel {channelId}</p>
+                      <p className="text-sm text-gray-500">Recommended for you</p>
+                    </div>
+                    <button className="p-2 text-primary-500 hover:text-primary-600 transition">
+                      ❤️
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="flex gap-3">
+              <GlassButton variant="secondary" onClick={handleBack}>
+                Back
+              </GlassButton>
+              <GradientButton
+                onClick={handleComplete}
+                className="flex-1"
+                disabled={loading}
+              >
+                {loading ? 'Saving...' : 'Let's Go! 🚀'}
+              </GradientButton>
+            </div>
+          </div>
+        );
+
+      case 'complete':
+        return (
+          <div className="text-center space-y-6 py-8">
+            <div className="text-6xl">🎉</div>
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900">You're all set!</h2>
+              <p className="text-gray-500 text-lg mt-2">
+                Your personalized GlassTV experience is ready.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="p-4 bg-gray-50 rounded-xl">
+                <span className="font-medium text-gray-700">{selectedGenres.length} genres</span>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-xl">
+                <span className="font-medium text-gray-700">{selectedLanguages.length} languages</span>
+              </div>
+            </div>
+            <GradientButton onClick={handleComplete} className="w-full">
+              Start Watching 📺
+            </GradientButton>
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-warm-beige p-4">
+      <GlassCard variant="solid" className="w-full max-w-2xl p-8">
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm text-gray-400">Step {step === 'welcome' ? 0 : step === 'genres' ? 1 : step === 'languages' ? 2 : step === 'habits' ? 3 : step === 'recommendations' ? 4 : 5} of 5</span>
+            <button
+              onClick={() => {
+                reset();
+                router.push('/home');
+              }}
+              className="text-sm text-gray-400 hover:text-gray-600 transition"
+            >
+              Skip
+            </button>
+          </div>
+          <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-primary-500 to-secondary-500 transition-all duration-500"
+              style={{
+                width: step === 'welcome' ? '10%' : step === 'genres' ? '30%' : step === 'languages' ? '50%' : step === 'habits' ? '70%' : step === 'recommendations' ? '90%' : '100%',
+              }}
+            />
+          </div>
+        </div>
+        {renderStep()}
+      </GlassCard>
+    </div>
+  );
+}
+11. ONBOARDING PAGE
+app/(auth)/onboarding/page.tsx
+typescript
+import { OnboardingFlow } from '@/components/auth/OnboardingFlow';
+import { auth } from '@/lib/auth/auth';
+import { redirect } from 'next/navigation';
+
+export default async function OnboardingPage() {
+  const session = await auth();
+  
+  if (!session) {
+    redirect('/login');
+  }
+
+  return <OnboardingFlow />;
+}
+12. ZUSTAND STORE
+lib/store/onboardingStore.ts
+typescript
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+interface OnboardingState {
+  selectedGenres: string[];
+  selectedLanguages: string[];
+  viewingTime: string | null;
+  viewingDevice: string | null;
+  onboardingCompleted: boolean;
+
+  toggleGenre: (genre: string) => void;
+  toggleLanguage: (lang: string) => void;
+  setViewingTime: (time: string) => void;
+  setViewingDevice: (device: string) => void;
+  completeOnboarding: () => void;
+  reset: () => void;
+}
+
+export const useOnboardingStore = create<OnboardingState>()(
+  persist(
+    (set) => ({
+      selectedGenres: [],
+      selectedLanguages: [],
+      viewingTime: null,
+      viewingDevice: null,
+      onboardingCompleted: false,
+
+      toggleGenre: (genre) =>
+        set((state) => ({
+          selectedGenres: state.selectedGenres.includes(genre)
+            ? state.selectedGenres.filter((g) => g !== genre)
+            : [...state.selectedGenres, genre],
+        })),
+
+      toggleLanguage: (lang) =>
+        set((state) => ({
+          selectedLanguages: state.selectedLanguages.includes(lang)
+            ? state.selectedLanguages.filter((l) => l !== lang)
+            : [...state.selectedLanguages, lang],
+        })),
+
+      setViewingTime: (time) => set({ viewingTime: time }),
+      setViewingDevice: (device) => set({ viewingDevice: device }),
+      completeOnboarding: () => set({ onboardingCompleted: true }),
+      reset: () =>
+        set({
+          selectedGenres: [],
+          selectedLanguages: [],
+          viewingTime: null,
+          viewingDevice: null,
+          onboardingCompleted: false,
+        }),
+    }),
+    {
+      name: 'onboarding-storage',
+    }
+  )
+);
+13. MAIN LAYOUTS
+app/(main)/layout.tsx
+typescript
+import { AuthGuard } from '@/components/layout/AuthGuard';
+import { BottomNav } from '@/components/layout/BottomNav';
+import { Sidebar } from '@/components/layout/Sidebar';
+import { Header } from '@/components/layout/Header';
+
+export default function MainLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <AuthGuard>
+      <div className="min-h-screen bg-gray-50">
+        {/* Desktop Sidebar */}
+        <Sidebar />
+
+        {/* Mobile Bottom Nav */}
+        <BottomNav />
+
+        {/* Main Content */}
+        <div className="lg:pl-64 pb-20 lg:pb-0">
+          <Header />
+          <main className="container mx-auto px-4 py-6">
+            {children}
+          </main>
+        </div>
+      </div>
+    </AuthGuard>
+  );
+}
+components/layout/AuthGuard.tsx
+typescript
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+
+export function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (status === 'loading') return;
+    if (!session) {
+      router.push('/login');
+    }
+  }, [session, status, router]);
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-primary-500 text-xl">Loading...</div>
+      </div>
+    );
+  }
+
+  return session ? <>{children}</> : null;
+}
+components/layout/BottomNav.tsx
+typescript
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { Home, Compass, Heart, User } from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
+
+const NAV_ITEMS = [
+  { label: 'Home', icon: Home, href: '/home' },
+  { label: 'Guide', icon: Compass, href: '/guide' },
+  { label: 'Favorites', icon: Heart, href: '/favorites' },
+  { label: 'Profile', icon: User, href: '/profile' },
+];
+
+export function BottomNav() {
+  const pathname = usePathname();
+
+  return (
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 glass-premium border-t border-white/20">
+      <div className="flex items-center justify-around h-16">
+        {NAV_ITEMS.map((item) => {
+          const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                'flex flex-col items-center justify-center gap-0.5 min-w-[64px] transition-all duration-200 relative',
+                isActive ? 'text-primary-600' : 'text-gray-400 hover:text-gray-600'
+              )}
+            >
+              <item.icon
+                className={cn(
+                  'w-5 h-5 transition-all duration-200',
+                  isActive && 'scale-110'
+                )}
+              />
+              <span className="text-[10px] font-medium">{item.label}</span>
+              {isActive && (
+                <span className="absolute -top-0.5 w-8 h-0.5 bg-gradient-to-r from-primary-500 to-secondary-500 rounded-full" />
+              )}
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+components/layout/Sidebar.tsx
+typescript
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { Home, Compass, Heart, User, Settings, Tv } from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
+
+const NAV_ITEMS = [
+  { label: 'Home', icon: Home, href: '/home' },
+  { label: 'Guide', icon: Compass, href: '/guide' },
+  { label: 'Favorites', icon: Heart, href: '/favorites' },
+  { label: 'Profile', icon: User, href: '/profile' },
+];
+
+export function Sidebar() {
+  const pathname = usePathname();
+
+  return (
+    <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 lg:z-50 bg-white border-r border-gray-100">
+      <div className="flex-1 flex flex-col overflow-y-auto">
+        {/* Logo */}
+        <div className="flex items-center gap-2 px-6 py-6">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center">
+            <Tv className="w-4 h-4 text-white" />
+          </div>
+          <span className="text-xl font-bold text-gray-900">GlassTV</span>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 px-3 py-4 space-y-1">
+          {NAV_ITEMS.map((item) => {
+            const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium',
+                  isActive
+                    ? 'bg-primary-50 text-primary-600'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                )}
+              >
+                <item.icon className="w-5 h-5" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Footer */}
+        <div className="px-3 py-4 border-t border-gray-100">
+          <Link
+            href="/settings"
+            className={cn(
+              'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium',
+              pathname === '/settings'
+                ? 'bg-primary-50 text-primary-600'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+            )}
+          >
+            <Settings className="w-5 h-5" />
+            Settings
+          </Link>
+        </div>
+      </div>
+    </aside>
+  );
+}
+components/layout/Header.tsx
+typescript
+'use client';
+
+import { useSession, signOut } from 'next-auth/react';
+import { Search, Bell, LogOut } from 'lucide-react';
+import { GlassCard } from '@/components/ui/GlassCard';
+import { GlassButton } from '@/components/ui/GlassButton';
+
+export function Header() {
+  const { data: session } = useSession();
+
+  return (
+    <header className="sticky top-0 z-40 glass-premium border-b border-white/20">
+      <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center gap-4 flex-1">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search channels..."
+              className="w-full pl-10 pr-4 py-2 bg-white/50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button className="p-2 rounded-xl hover:bg-gray-100 transition text-gray-600">
+            <Bell className="w-5 h-5" />
+          </button>
+          <div className="flex items-center gap-3 ml-2">
+            <span className="text-sm font-medium text-gray-700 hidden sm:inline">
+              {session?.user?.name || session?.user?.email}
+            </span>
+            <GlassButton
+              variant="secondary"
+              size="sm"
+              onClick={() => signOut()}
+              className="!p-2 !rounded-xl"
+            >
+              <LogOut className="w-4 h-4" />
+            </GlassButton>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+14. UTILITY FUNCTIONS
+lib/utils/cn.ts
+typescript
+import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+15. API ROUTES
+app/api/auth/signup/route.ts
+typescript
+import { NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import { users } from '@/lib/db/schema';
+import { hash } from 'bcryptjs';
+
+export async function POST(req: Request) {
+  try {
+    const { name, email, password } = await req.json();
+
+    // Validate input
+    if (!email || !password || !name) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    // Check if user exists
+    const existingUser = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    if (existingUser.length > 0) {
+      return NextResponse.json(
+        { error: 'User already exists' },
+        { status: 409 }
+      );
+    }
+
+    // Hash password and create user
+    const hashedPassword = await hash(password, 12);
+    
+    await db.insert(users).values({
+      id: crypto.randomUUID(),
+      email,
+      displayName: name,
+      password: hashedPassword,
+    });
+
+    return NextResponse.json(
+      { message: 'User created successfully' },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error('Signup error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+app/api/auth/login/route.ts
+typescript
+import { NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import { users } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
+import { compare } from 'bcryptjs';
+import { signIn } from '@/lib/auth/auth';
+
+export async function POST(req: Request) {
+  try {
+    const { email, password } = await req.json();
+
+    // Validate input
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: 'Missing email or password' },
+        { status: 400 }
+      );
+    }
+
+    // Find user
+    const user = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    if (user.length === 0) {
+      return NextResponse.json(
+        { error: 'Invalid credentials' },
+        { status: 401 }
+      );
+    }
+
+    // Verify password
+    const isValid = await compare(password, user[0].password);
+    if (!isValid) {
+      return NextResponse.json(
+        { error: 'Invalid credentials' },
+        { status: 401 }
+      );
+    }
+
+    // Create session using NextAuth
+    await signIn('credentials', {
+      email,
+      password,
+      redirect: false,
+    });
+
+    return NextResponse.json(
+      { message: 'Login successful' },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('Login error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+16. HOME PAGE
+app/(main)/home/page.tsx
+typescript
+import { auth } from '@/lib/auth/auth';
+import { db } from '@/lib/db';
+import { channels, watchHistory, userPreferences } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
+import { GlassCard } from '@/components/ui/GlassCard';
+
+export default async function HomePage() {
+  const session = await auth();
+  
+  if (!session) return null;
+
+  // Fetch channels
+  const allChannels = await db
+    .select()
+    .from(channels)
+    .where(eq(channels.isVerified, true))
+    .limit(20);
+
+  // Fetch user preferences for personalization
+  const preferences = await db
+    .select()
+    .from(userPreferences)
+    .where(eq(userPreferences.userId, session.user.id))
+    .limit(1);
+
+  return (
+    <div className="space-y-8">
+      {/* Welcome Section */}
+      <div className="bg-gradient-to-br from-warm-beige to-gray-50 rounded-3xl p-8">
+        <h1 className="text-3xl font-bold text-gray-900">
+          Good {new Date().getHours() < 12 ? 'Morning' : 'Evening'}, {session.user.name || 'TV Lover'}! 👋
+        </h1>
+        <p className="text-gray-600 mt-1">
+          {preferences.length > 0 
+            ? 'Your personalized channels are ready'
+            : 'Let\'s find something great for you to watch'}
+        </p>
+      </div>
+
+      {/* Continue Watching */}
+      <section>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Continue Watching</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {/* Placeholder cards - will be populated with real data in Phase 2 */}
+          {[1, 2, 3, 4].map((i) => (
+            <GlassCard key={i} variant="solid" className="p-4 text-center">
+              <div className="aspect-video bg-gray-200 rounded-xl mb-3" />
+              <p className="font-medium text-gray-700">Channel {i}</p>
+            </GlassCard>
+          ))}
+        </div>
+      </section>
+
+      {/* All Channels */}
+      <section>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">All Channels</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {allChannels.map((channel) => (
+            <GlassCard key={channel.id} variant="solid" hoverable className="p-4 cursor-pointer">
+              {channel.logoUrl ? (
+                <img
+                  src={channel.logoUrl}
+                  alt={channel.name}
+                  className="w-full h-20 object-contain mb-3"
+                />
+              ) : (
+                <div className="w-full h-20 bg-gray-100 rounded-xl flex items-center justify-center mb-3">
+                  <span className="text-2xl">📺</span>
+                </div>
+              )}
+              <p className="font-medium text-gray-800 text-sm truncate">{channel.name}</p>
+              {channel.category && (
+                <p className="text-xs text-gray-400">{channel.category}</p>
+              )}
+            </GlassCard>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+17. ROOT LAYOUT
+app/layout.tsx
+typescript
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import './globals.css';
+import { SessionProvider } from 'next-auth/react';
+
+const inter = Inter({ subsets: ['latin'] });
+
+export const metadata: Metadata = {
+  title: 'GlassTV - AI-Powered IPTV',
+  description: 'Watch live TV with AI subtitles and personalized recommendations',
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body className={inter.className}>
+        <SessionProvider>
+          {children}
+        </SessionProvider>
+      </body>
+    </html>
+  );
+}
+18. POSTCSS CONFIG
+postcss.config.mjs
+javascript
+export default {
+  plugins: {
+    '@tailwindcss/postcss': {},
+    autoprefixer: {},
+  },
+};
+19. NEXT.JS CONFIG
+next.config.js
+javascript
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
+  },
+  typescript: {
+    ignoreBuildErrors: false,
+  },
+  eslint: {
+    ignoreDuringBuilds: false,
+  },
+};
+
+export default nextConfig;
+20. VERIFICATION CHECKLIST
+After the AI generates the code, verify:
+
+□ npm install completes without errors
+□ npx drizzle-kit push:pg creates the database tables in Neon
+□ npm run dev starts the development server
+□ /login page loads with the glassmorphism design
+□ /signup page loads correctly
+□ User can create an account
+□ User can log in
+□ After login, redirected to /onboarding
+□ Onboarding flow works (genres → languages → habits → recommendations)
+□ Onboarding data is saved to the database
+□ /home page loads with the channel grid
+□ Mobile bottom nav appears on small screens
+□ Desktop sidebar appears on large screens

@@ -1,0 +1,83 @@
+// GlassTV - Prisma schema
+// Adapted from the original Drizzle/Neon spec to Prisma + SQLite.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Users - managed via our lightweight cookie-based session (next-auth v4 is available
+// but the SPA-style auth flow is simpler with a signed cookie).
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  displayName String?
+  password    String
+  avatar      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  preferences UserPreference?
+  favorites   Favorite[]
+  history     WatchHistory[]
+}
+
+// User Preferences - collected during the AI onboarding flow.
+// NOTE: Prisma primitive types cannot be lists, so array fields (genres, languages,
+// categories) are stored as JSON-encoded strings and parsed in the app layer.
+model UserPreference {
+  id                  Int      @id @default(autoincrement())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredGenres     String   @default("[]") // JSON string[]
+  preferredLanguages  String   @default("[]") // JSON string[]
+  favoriteCategories  String   @default("[]") // JSON string[]
+  viewingTime         String?  // morning | afternoon | evening | late_night
+  viewingDevice       String?  // phone | tablet | tv | computer
+  onboardingCompleted Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// Channels - cached IPTV channels. Seeded with sample data for Phase 1.
+model Channel {
+  id         String     @id
+  name       String
+  logoUrl    String?
+  streamUrl  String
+  category   String?
+  country    String?
+  language   String?
+  isVerified Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  favorites Favorite[]
+  history   WatchHistory[]
+}
+
+// Favorites - user <-> channel join with composite primary key.
+model Favorite {
+  userId    String   @default(cuid())
+  channelId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  addedAt   DateTime @default(now())
+
+  @@id([userId, channelId])
+}
+
+// Watch History
+model WatchHistory {
+  id              Int      @id @default(autoincrement())
+  userId          String
+  channelId       String
+  watchedAt       DateTime @default(now())
+  durationSeconds Int?
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel         Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+}
