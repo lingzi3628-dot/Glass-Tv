@@ -612,3 +612,248 @@ Stage Summary:
   [x] /home (view) loads with channel grid
   [x] mobile bottom nav appears on small screens
   [x] desktop sidebar appears on large screens
+
+---
+
+Task ID: 2-A
+Agent: full-stack-developer (Phase 2 backend)
+Task: IPTV sources, M3U parser, sync API, extended channels API, preferences API
+
+Work Log:
+- Read worklog.md in full to absorb prior context: the Prisma schema
+  (User/UserPreference/Channel/Favorite/WatchHistory — JSON-string array
+  fields for genres/languages/categories), the `db` client at `@/lib/db`,
+  the cookie-session helpers at `@/lib/session.ts`, the `requireUser`/
+  `unauthorized`/`badRequest` helpers at `@/lib/api-auth.ts`, the existing
+  `/api/channels` (list) and `/api/channels/[id]` (detail) routes from
+  task 2-b, and the single-page-app constraint (only `/` route + routes
+  under `src/app/api/`).
+- Created `src/lib/iptv/` directory (did not exist).
+- Wrote `src/lib/iptv/sources.ts`:
+  - `IPTVSource` interface + `IPTV_SOURCES` array (4 entries: iptv-org
+    global + english, Free-TV Global, World IPTV).
+  - `DEFAULT_SOURCES` exported as `string[]` (the URLs of all enabled
+    sources) for the sync API default.
+- Wrote `src/lib/iptv/parser.ts` — a self-contained M3U parser, NO
+  `@iptv/playlist` dependency:
+  - `ParsedChannel` (id/name/logoUrl/streamUrl/category/country/language/
+    isVerified=false) + `ParseResult` (channels/total/source) interfaces.
+  - `generateChannelId(url, name)`: slugifies name to lowercase a-z0-9
+    dashed (clamped to 40 chars), then appends an 8-char SHA1 hash of the
+    URL -> `iptv-<slug>-<hash8>`. Stable so re-syncing upserts instead of
+    duplicates.
+  - `parseM3UPlaylist(content, sourceUrl)`: splits on any of \r\n / \n / \r,
+    iterates line-by-line; on `#EXTINF:` parses `key="value"` attrs via a
+    global regex + the trailing `,Display Name` (split on the FIRST comma
+    so channel names containing commas survive); the NEXT non-empty
+    non-`#` line is the stream URL. Orphan URLs and unknown directives
+    (`#EXTGRP`, `#EXTVLCOPT`) are ignored. Entries without a stream URL
+    are skipped.
+  - `fetchAndParsePlaylist(url)`: `fetch` with `User-Agent: GlassTV/1.0`,
+    `AbortSignal.timeout(30_000)`, `cache: 'no-store'`. Throws on non-2xx
+    so the caller can record the URL as failed.
+- Wrote `src/app/api/channels/sync/route.ts` (POST):
+  - `export const maxDuration = 300` (5 min for large playlists).
+  - Requires auth via `requireUser` + `unauthorized`. Body validated by
+    `isStringArray` guard (`unknown` -> `string[]` check); defaults to
+    `DEFAULT_SOURCES` when omitted. Empty array -> 400.
+  - For each source URL: `fetchAndParsePlaylist` -> per-channel
+    `findUnique`-then-`upsert` so we can count `'created'` vs `'updated'`.
+    Per-source hard cap of 500 channels (logs a warning if exceeded).
+  - Per-source try/catch: on failure, logs + appends URL to
+    `failedSources` and continues. The route NEVER returns 500 from a
+    network failure — it always returns 200 with the partial result so
+    the frontend can show "sync attempted, X sources failed (likely
+    offline)".
+  - Response: `{ success: true, message: 'Channel sync completed', data:
+    { totalChannels, newChannels, updatedChannels, failedSources: string[],
+    sourcesProcessed } }`.
+- Wrote `src/lib/channels.ts` — shared helpers so the distinct-list query
+  is defined in exactly one place:
+  - `ChannelPublic` interface (id/name/logoUrl/category/country/language/
+    isVerified — NO streamUrl).
+  - `toPublic(c)` projection that strips `streamUrl`.
+  - `getDistinctCategories()` / `getDistinctLanguages()` Prisma queries:
+    `where: { field: { not: null } }` + `distinct: ['field']` + `select`
+    + `orderBy: { field: 'asc' }`, then a JS filter for null safety.
+- Extended `src/app/api/channels/route.ts` (GET):
+  - Added `?page` (1-based, default 1) + `?limit` (default 50, capped at
+    200) pagination with `offset = (page-1) * limit`.
+  - Added `?sort=name|updatedAt` (default `name`) + `?order=asc|desc`
+    (default `asc`).
+  - Response is now `{ channels, pagination: { page, limit, total,
+    totalPages }, categories: string[], languages: string[] }`. The
+    `channels` array keeps the EXACT same shape/position as before so
+    existing callers (`data.channels`) keep working — verified live in
+    dev.log that the existing frontend's `GET /api/channels?limit=100`
+    still returns 200.
+  - Page query + count + both distinct queries run via `Promise.all` for
+    one round-trip's worth of latency.
+  - `streamUrl` still NOT included on the list endpoint.
+- Extended `src/app/api/channels/[id]/route.ts` (GET):
+  - Added `streamUrl: true` to the Prisma `select`. The detail endpoint
+    now returns `{ channel: { id, name, logoUrl, streamUrl, category,
+    country, language, isVerified } }` so the player/preview popup can
+    load the stream. Auth still required; 404 still returned if not
+    found.
+  - The list endpoint intentionally omits streamUrl; the detail endpoint
+    includes it because the user has explicitly picked a channel to
+    watch.
+- Wrote `src/app/api/channels/categories/route.ts` (GET):
+  - Lightweight endpoint for filter UIs that don't want to load the full
+    channel list. Reuses `getDistinctCategories` / `getDistinctLanguages`
+    so the two endpoints stay in sync.
+  - Response: `{ categories: string[], languages: string[] }`. Requires
+    auth.
+- Wrote `src/app/api/preferences/route.ts` (GET):
+  - Requires auth. Fetches the user's `UserPreference` row (may be null).
+  - `parseJsonArray(value: string | null): string[]` helper: JSON-parses
+    the stored string, validates it's an array, filters to strings,
+    returns `[]` on any failure. Uses `unknown` + type guards — no `any`.
+  - Response: `{ data: { preferredGenres, preferredLanguages,
+    favoriteCategories, viewingTime, viewingDevice, onboardingCompleted }
+    | null }` (`null` when no preference row exists yet).
+
+Stage Summary:
+- Files produced (all NEW, 7 total):
+  - src/lib/iptv/sources.ts
+  - src/lib/iptv/parser.ts
+  - src/app/api/channels/sync/route.ts
+  - src/app/api/channels/categories/route.ts
+  - src/app/api/preferences/route.ts
+  - src/lib/channels.ts
+  - agent-ctx/2-A-phase-2-backend.md (work record for downstream agents)
+- Files modified (2 total):
+  - src/app/api/channels/route.ts (extended GET — additive, backward compat)
+  - src/app/api/channels/[id]/route.ts (extended GET — added streamUrl)
+- Endpoints exposed (all return JSON, all wrapped in try/catch):
+  - POST /api/channels/sync        -> 200 { success, message, data: { totalChannels,
+                                       newChannels, updatedChannels, failedSources,
+                                       sourcesProcessed } }  (never 500 on network
+                                       failure — failed URLs land in failedSources)
+  - GET  /api/channels             -> 200 { channels, pagination, categories, languages }
+                                       (?category, ?language, ?q, ?page, ?limit,
+                                        ?sort=name|updatedAt, ?order=asc|desc)
+  - GET  /api/channels/[id]        -> 200 { channel: { ..., streamUrl } } | 404
+                                       (now INCLUDES streamUrl for the player)
+  - GET  /api/channels/categories  -> 200 { categories, languages }
+  - GET  /api/preferences          -> 200 { data: PreferencesData | null }
+- Key decisions:
+  - Self-contained M3U parser (no `@iptv/playlist` dep) — the format is
+    trivial, ~120 lines covers everything GlassTV needs.
+  - Deterministic channel ids (`iptv-<slug>-<sha1-8>`) so re-syncing
+    upserts instead of duplicating, and seeded channels (which use a
+    different id scheme) are never accidentally clobbered.
+  - Sync never returns 500 from a network failure — per-source try/catch
+    records failures in `failedSources` and the route returns 200 with
+    the partial result, so the sandbox's lack of outbound internet to
+    githubusercontent.com degrades gracefully.
+  - `streamUrl` split: LIST endpoint omits it (security); DETAIL endpoint
+    includes it (user has explicitly picked a channel to watch). Matches
+    the task spec exactly.
+  - Shared `getDistinctCategories` / `getDistinctLanguages` helpers in
+    `src/lib/channels.ts` so `/api/channels` and `/api/channels/categories`
+    can't drift apart.
+  - `parseJsonArray` uses `unknown` + type guards (no `any`); returns
+    `[]` on any failure so the frontend never sees a thrown error.
+  - Backward compat verified live: the existing frontend's
+    `GET /api/channels?limit=100` and `GET /api/channels?q=ku&limit=100`
+    requests still return 200 after the response shape extension (seen
+    in dev.log), and the Prisma query log confirms the page query +
+    count + distinct categories + distinct languages are all running in
+    parallel via Promise.all.
+- Lint status: PASS (0 errors, 0 warnings).
+- TypeScript status: PASS (0 errors in src/ — only pre-existing error in
+  skills/stock-analysis-skill/src/analyzer.ts which is not part of this task).
+- No new packages installed (per task constraint). No tests written.
+  Prisma schema NOT modified (already had everything needed).
+
+---
+Task ID: 2-C
+Agent: Main (orchestrator) + subagents 2-A and 2-B
+Task: Phase 2 integration - wire ChannelGrid into Home/Guide, wire player + preview popup, sync UI
+
+Work Log:
+- Installed hls.js@1.7.1 and use-debounce@10.1.1
+- Updated scripts/seed.ts: 6 verified channels now have REAL public HLS test streams
+  (Big Buck Bunny, Sintel, Tears of Steel, Mux patterns) so the preview popup
+  and player can actually play video in a browser. Re-ran db:seed.
+- Task 2-A (backend subagent) completed:
+  * src/lib/iptv/sources.ts - 4 public IPTV M3U sources (iptv-org, free-tv, world-iptv)
+  * src/lib/iptv/parser.ts - self-contained M3U parser (NO @iptv/playlist dep),
+    SHA1-hashed channel ids, regex attribute parsing
+  * src/app/api/channels/sync/route.ts - POST sync, maxDuration=300s, per-source
+    try/catch, 500-channel cap per source, never 500s on network failure
+  * Extended src/app/api/channels/route.ts - added pagination (?page/?limit),
+    sort (?sort/?order), returns {channels, pagination, categories, languages}
+    (backward compatible - data.channels still works)
+  * Extended src/app/api/channels/[id]/route.ts - now returns streamUrl (player needs it)
+  * src/app/api/channels/categories/route.ts - lightweight distinct categories+languages
+  * src/app/api/preferences/route.ts - GET user preferences with decoded JSON arrays
+  * src/lib/channels.ts - shared ChannelPublic type + distinct helpers
+- Task 2-B (frontend subagent) completed:
+  * Extended src/lib/store/app-store.ts - added playerChannel/previewChannel state
+    + openPlayer/closePlayer/openPreview/closePreview
+  * src/lib/hooks/use-hls-player.ts - reusable HLS hook (hls.js, autoPlay, muted,
+    togglePlay, toggleMute, loading/error states, Safari native fallback)
+  * src/components/channels/channel-grid.tsx - reusable grid with debounced search,
+    category chips, language select, pagination, load-more, empty state, skeletons
+  * src/components/popup/preview-popup.tsx - THE STANDOUT: dark glassmorphism HLS
+    mini-player, auto-dismiss progress bar, LIVE badge, viewer count, watch/dismiss
+    buttons, keyboard shortcuts (Esc/Space/M), hover-pause timer, streamUrl fetch
+  * src/components/player/player-overlay.tsx - full-screen player with play/pause,
+    mute, fullscreen API, close button, favorites heart, Escape to close
+  * Updated src/app/page.tsx - AutoPreviewTrigger (fires 2s after landing in app,
+    once per session), PreviewPopupHost, PlayerOverlayHost
+- Phase 2-C (main orchestrator):
+  * Updated src/components/main/home-view.tsx - channel cards now call openPlayer()
+    instead of just navigating to guide
+  * Rewrote src/components/main/guide-view.tsx - replaced inline grid with the new
+    ChannelGrid component, honors Header search via sessionStorage seed
+  * Added initialSearch prop to ChannelGrid for the guide's seed query
+  * Updated src/components/main/profile-view.tsx - added "Channel Sources" card with
+    SyncChannelsButton (calls POST /api/channels/sync, shows progress + result)
+
+Verification (Agent Browser end-to-end):
+- [x] Landing page renders, login works for returning user (alex@glass.test)
+- [x] Preview popup auto-appears ~2s after landing in app (Action Movie Hub, then
+      Global Sports Network on reload) with LIVE badge, viewer count, countdown
+- [x] Preview popup HLS video plays (muted autoplay, unmute button works)
+- [x] "Watch Now" in preview opens full-screen PlayerOverlay
+- [x] PlayerOverlay has play/pause, mute, fullscreen, close controls
+- [x] Escape key closes both preview popup and player
+- [x] Guide view uses new ChannelGrid: search, 8 category chips, language select
+- [x] Sports category filter shows all 4 sports channels (after fresh load)
+- [x] Search filters channels by name (debounced)
+- [x] Load More paginates (24 -> 48 -> ...)
+- [x] Clicking a channel card in Guide opens the player
+- [x] Profile > Channel Sources > Sync channels: POST /api/channels/sync
+      successfully synced 1669 new + 331 updated from 4 real IPTV sources
+      (iptv-org global/english, free-tv, world-iptv) - took ~30s
+- [x] After sync, guide shows 1703 total channels, pagination works
+- [x] Lint: 0 errors, 0 warnings
+- [x] No browser console errors
+- [x] VLM verdict on preview popup: "polished and premium, sleek modern aesthetic,
+      sophisticated immersive look, well-balanced spacing/typography/hierarchy"
+- [x] VLM verdict on player overlay: "highly professional, clean minimalist aesthetic,
+      aligns with Netflix/Apple TV standards"
+
+Stage Summary:
+- Phase 2 is fully functional with REAL IPTV integration (1669 live channels synced)
+- The standout Preview Popup works end-to-end: auto-appears, plays HLS video,
+  auto-dismisses with countdown, opens full player on "Watch Now"
+- ChannelGrid supports search/filter/pagination across 1700+ channels
+- All 11 verification checklist items from the spec pass:
+  [x] new dependencies installed (hls.js, use-debounce)
+  [x] channels table exists (Prisma schema from Phase 1)
+  [x] sync endpoint works: POST /api/channels/sync (1669 new channels)
+  [x] channels appear in database (1703 total)
+  [x] channels API works: GET /api/channels with pagination/filters
+  [x] channel grid displays on home page and guide
+  [x] search and category filtering work
+  [x] preview popup appears ~2s after login
+  [x] popup shows mini-player with HLS stream (real video plays)
+  [x] "Watch Now" opens full-screen player
+  [x] "Maybe Later" / Escape dismisses the popup
+  [x] auto-dismiss timer works (12s countdown with progress bar)
+  [x] keyboard shortcuts: Escape (dismiss), Space (play/pause), M (mute)

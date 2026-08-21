@@ -6,6 +6,8 @@ export interface Channel {
   id: string
   name: string
   logoUrl?: string | null
+  /** Present only on the single-channel detail endpoint (`/api/channels/[id]`). */
+  streamUrl?: string | null
   category?: string | null
   country?: string | null
   language?: string | null

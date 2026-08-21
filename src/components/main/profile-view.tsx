@@ -2,11 +2,12 @@
 
 import * as React from 'react'
 
-import { LogOut, RefreshCw, Tv } from 'lucide-react'
+import { LogOut, RefreshCw, Tv, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { GlassCard } from '@/components/glass/glass-card'
 import { GlassButton } from '@/components/glass/glass-button'
+import { GradientButton } from '@/components/glass/gradient-button'
 import { useAppStore } from '@/lib/store/app-store'
 import { useAuthStore } from '@/lib/store/auth-store'
 import { useFavorites } from '@/lib/hooks/use-favorites'
@@ -161,6 +162,20 @@ export function ProfileView() {
         </div>
       </GlassCard>
 
+      {/* Sync channels (Phase 2 IPTV integration) */}
+      <GlassCard hoverable={false} className="p-6 space-y-3">
+        <div>
+          <h3 className="text-lg font-semibold text-foreground">
+            Channel Sources
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Sync additional channels from public IPTV M3U playlists. May take
+            a minute and some sources may be unreachable.
+          </p>
+        </div>
+        <SyncChannelsButton onSynced={() => setChannelCount(null)} />
+      </GlassCard>
+
       {/* Sign out */}
       <GlassCard hoverable={false} className="p-6 space-y-3">
         <div>
@@ -175,5 +190,108 @@ export function ProfileView() {
         </GlassButton>
       </GlassCard>
     </div>
+  )
+}
+
+interface SyncResponse {
+  success?: boolean
+  message?: string
+  data?: {
+    totalChannels: number
+    newChannels: number
+    updatedChannels: number
+    failedSources: string[]
+    sourcesProcessed: number
+  }
+  error?: string
+}
+
+function SyncChannelsButton({ onSynced }: { onSynced: () => void }) {
+  const [status, setStatus] = React.useState<
+    'idle' | 'syncing' | 'done' | 'error'
+  >('idle')
+  const [result, setResult] = React.useState<SyncResponse['data'] | null>(null)
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null)
+
+  async function handleSync() {
+    setStatus('syncing')
+    setResult(null)
+    setErrorMsg(null)
+    try {
+      const res = await fetch('/api/channels/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = (await res.json()) as SyncResponse
+      if (!res.ok) {
+        setStatus('error')
+        setErrorMsg(data.error || 'Sync failed')
+        return
+      }
+      setStatus('done')
+      setResult(data.data ?? null)
+      onSynced()
+    } catch (e) {
+      setStatus('error')
+      setErrorMsg(e instanceof Error ? e.message : 'Network error')
+    }
+  }
+
+  if (status === 'syncing') {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        Syncing channels from public IPTV sources…
+      </div>
+    )
+  }
+
+  if (status === 'done' && result) {
+    const failed = result.failedSources.length
+    return (
+      <div className="space-y-3">
+        <div className="flex items-start gap-2 text-sm">
+          <CheckCircle2 className="h-4 w-4 mt-0.5 text-emerald-600 flex-shrink-0" aria-hidden />
+          <div>
+            <p className="font-medium text-foreground">
+              Sync complete: +{result.newChannels} new, {result.updatedChannels} updated
+            </p>
+            <p className="text-muted-foreground">
+              {result.sourcesProcessed} source(s) processed
+              {failed > 0 ? `, ${failed} failed (likely offline)` : ''}.
+            </p>
+          </div>
+        </div>
+        <GradientButton size="sm" onClick={handleSync}>
+          <RefreshCw className="h-4 w-4 mr-2" aria-hidden />
+          Sync again
+        </GradientButton>
+      </div>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-start gap-2 text-sm">
+          <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-600 flex-shrink-0" aria-hidden />
+          <div>
+            <p className="font-medium text-foreground">Sync failed</p>
+            <p className="text-muted-foreground">{errorMsg}</p>
+          </div>
+        </div>
+        <GradientButton size="sm" onClick={handleSync}>
+          Try again
+        </GradientButton>
+      </div>
+    )
+  }
+
+  return (
+    <GradientButton size="sm" onClick={handleSync}>
+      <RefreshCw className="h-4 w-4 mr-2" aria-hidden />
+      Sync channels
+    </GradientButton>
   )
 }

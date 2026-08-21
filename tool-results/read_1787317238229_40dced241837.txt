@@ -1,0 +1,615 @@
+     1→     1→# GlassTV Build Worklog
+     2→     2→
+     3→     3→This file is the **single shared worklog** for all agents working on GlassTV.
+     4→     4→Before starting work, read this file in full. After finishing, **append** your
+     5→     5→section (do NOT overwrite). Start every new section with a line containing
+     6→     6→exactly `---`.
+     7→     7→
+     8→     8→---
+     9→     9→
+    10→    10→Task ID: 1
+    11→    11→Agent: Main (orchestrator)
+    12→    12→Task: Phase 1 foundation - Prisma schema, design system, session lib, seed data
+    13→    13→
+    14→    14→Work Log:
+    15→    15→- Read the full GlassTV spec from upload/Pasted Content_1787313162395.txt
+    16→    16→- Adapted the spec to the project's actual stack:
+    17→    17→  - Next.js 16 (not 15) with App Router
+    18→    18→  - Prisma + SQLite (not Drizzle + Neon) - already configured in the project
+    19→    19→  - Single-page app on the `/` route ONLY (per system rule: "user can only see the / route")
+    20→    20→    -> Navigation between login/signup/onboarding/home/guide/favorites/profile happens
+    21→    21→       client-side via a Zustand `view` state, NOT via Next.js routing.
+    22→    22→  - Cookie-based HMAC session (not NextAuth redirects) - see src/lib/session.ts
+    23→    23→  - Node built-in crypto.scryptSync for password hashing (no bcryptjs dependency)
+    24→    24→  - Prisma primitive types cannot be lists, so array fields (genres, languages)
+    25→    25→    are stored as JSON-encoded strings.
+    26→    26→- Wrote prisma/schema.prisma with models: User, UserPreference, Channel, Favorite, WatchHistory
+    27→    27→- Ran `bun run db:push` successfully - DB in sync
+    28→    28→- Wrote src/app/globals.css with GlassTV design system:
+    29→    29→  - Primary (violet oklch), Secondary (purple), warm-beige/wood palette
+    30→    30→  - .glass-premium, .glass-dark, .card-solid, .card-solid-accent utilities
+    31→    31→  - .btn-gradient, .btn-gradient-sm, .focus-ring utilities
+    32→    32→  - Custom scrollbar styling (.scrollbar-premium)
+    33→    33→  - Slide-up / fade-in / pulse-slow animations
+    34→    34→- Wrote src/lib/session.ts - cookie session helpers:
+    35→    35→  - createSessionToken / getSession / setSessionCookie / clearSessionCookie
+    36→    36→  - hashPassword / verifyPassword (scrypt, no external deps)
+    37→    37→  - newId (crypto.randomUUID wrapper)
+    38→    38→- Wrote scripts/seed.ts - 34 curated channels covering all 8 onboarding genres
+    39→    39→  (sports, news, movies, documentaries, kids, music, lifestyle, international)
+    40→    40→  with multiple languages (en, es, fr, de, hi) and countries.
+    41→    41→  Logo URLs use the `emoji:<glyph>` convention so the frontend can render an
+    42→    42→  emoji tile instead of fetching a remote image.
+    43→    43→- Ran `bun run db:seed` - 34 channels seeded successfully
+    44→    44→- Added `db:seed` script to package.json
+    45→    45→- Updated src/app/layout.tsx metadata to GlassTV branding
+    46→    46→
+    47→    47→Stage Summary:
+    48→    48→- Database: SQLite at db/custom.db, schema pushed, 34 channels seeded
+    49→    49→- Auth: src/lib/session.ts provides createSessionToken/getSession/setSessionCookie/
+    50→    50→  clearSessionCookie/hashPassword/verifyPassword/newId
+    51→    51→- Design tokens available in globals.css: glass-premium, glass-dark, card-solid,
+    52→    52→  card-solid-accent, btn-gradient, btn-gradient-sm, focus-ring, scrollbar-premium,
+    53→    53→  animate-slide-up, animate-fade-in, animate-pulse-slow
+    54→    54→- CSS vars: --primary (violet), --secondary (purple), --warm-beige, --warm-wood,
+    55→    55→  --warm-wood-dark. Tailwind utilities bg-primary, text-primary-foreground etc.
+    56→    56→  all work via the @theme inline mapping.
+    57→    57→- IMPORTANT for subagents: This is a SINGLE-PAGE APP. Do NOT create additional
+    58→    58→  routes under src/app/. All views (login, signup, onboarding, home, guide,
+    59→    59→  favorites, profile) are rendered by src/app/page.tsx based on a Zustand
+    60→    60→  `view` state. API routes under src/app/api/ are fine.
+    61→    61→- Components go in src/components/ (note: existing shadcn/ui components are in
+    62→    62→  src/components/ui/ and MUST be reused, not re-created). GlassTV-specific UI
+    63→    63→  components (GlassCard, GlassButton, GlassInput, GradientButton) should go in
+    64→    64→  src/components/glass/ to avoid clashing with the shadcn/ui folder.
+    65→    65→- The shared `cn` util lives at src/lib/utils.ts (already exists, exports `cn`).
+    66→    66→
+    67→    67→---
+    68→    68→
+    69→    69→Task ID: 2-a
+    70→    70→Agent: full-stack-developer (UI + stores)
+    71→    71→Task: Build GlassTV UI components and Zustand stores
+    72→    72→
+    73→    73→Work Log:
+    74→    74→- Read worklog.md in full to understand the design tokens (glass-premium, glass-dark,
+    75→    75→  card-solid, btn-gradient, btn-gradient-sm, focus-ring), the existing `cn` helper
+    76→    76→  at src/lib/utils.ts, the Prisma schema (Channel: id/name/logoUrl/streamUrl/category/
+    77→    77→  country/language/isVerified), and the single-page-app constraint (no routes under
+    78→    78→  src/app/, only src/app/api/).
+    79→    79→- Confirmed tsconfig `@/*` alias -> `./src/*`, framer-motion v12, lucide-react v0.525,
+    80→    80→  zustand v5 all already installed. Did NOT install any new packages.
+    81→    81→- Created src/components/glass/ and src/lib/store/ directories (they did not exist).
+    82→    82→- Built src/components/glass/glass-card.tsx:
+    83→    83→  - 3 variants: premium (glass-premium), dark (glass-dark), solid (card-solid, DEFAULT)
+    84→    84→  - hoverable prop (default true) toggles `transition-all duration-300 hover:scale-[1.02]`
+    85→    85→  - forwardRef + displayName; spreads all div props; default rounded-2xl p-4
+    86→    86→- Built src/components/glass/glass-button.tsx:
+    87→    87→  - 5 variants (primary/secondary/glass/gradient/ghost) + 4 sizes (sm/md/lg/icon)
+    88→    88→  - Always includes focus-ring, disabled/active states, font-semibold, transition
+    89→    89→  - forwardRef + displayName; default type="button" to avoid accidental form submits
+    90→    90→- Built src/components/glass/glass-input.tsx:
+    91→    91→  - Optional label (renders <label> with text-sm font-medium text-foreground/80 mb-1.5)
+    92→    92→  - Optional error string (renders <p text-destructive mt-1> + switches border/ring to
+    93→    93→    destructive)
+    94→    94→  - Auto-generated id via React.useId() so <label htmlFor> works without consumer input
+    95→    95→  - aria-invalid set when error present
+    96→    96→  - forwardRef + displayName; spreads all input props
+    97→    97→- Built src/components/glass/gradient-button.tsx:
+    98→    98→  - Dedicated gradient CTA with sizes sm (btn-gradient-sm), md (btn-gradient), lg
+    99→    99→    (btn-gradient + text-lg px-8 py-4 rounded-2xl)
+   100→   100→  - focus-ring + disabled/active states + transition
+   101→   101→  - forwardRef + displayName
+   102→   102→- Built src/components/glass/channel-card.tsx:
+   103→   103→  - Presentational tile driven by `channel` prop
+   104→   104→  - Logo area is h-20 rounded-xl bg-muted; supports `emoji:<glyph>` logoUrl convention
+   105→   105→    (extracts glyph, renders at text-4xl), real http(s) URL (<img object-contain>),
+   106→   106→    or fallback 📺 emoji
+   107→   107→  - Heart favorite toggle in top-right corner using lucide-react Heart icon
+   108→   108→    (fill-red-500 text-red-500 when favorited, else outline). stopPropagation so it
+   109→   109→    doesn't trigger the card onClick.
+   110→   110→  - Wrapped in framer-motion motion.div with whileHover={{ y: -4 }}
+   111→   111→  - Keyboard accessible (role=button, tabIndex=0, Enter/Space handler) when onClick set
+   112→   112→- Built src/lib/store/app-store.ts (SPA router - NOT persisted):
+   113→   113→  - AppView = 'landing' | 'login' | 'signup' | 'onboarding' | 'app'
+   114→   114→  - AppTab = 'home' | 'guide' | 'favorites' | 'profile'
+   115→   115→  - Initial view='landing', activeTab='home'
+   116→   116→  - goToApp(tab?) shortcut sets view='app' and activeTab=tab ?? 'home'
+   117→   117→- Built src/lib/store/auth-store.ts (NOT persisted - cookie is source of truth):
+   118→   118→  - AuthUser type matches User+UserPreference projections
+   119→   119→  - status: 'loading' | 'authenticated' | 'unauthenticated' (defaults to 'loading' so
+   120→   120→    the initial server getSession() check drives the real state on first render)
+   121→   121→  - logout() is async: POSTs /api/auth/logout, then clears user + sets status to
+   122→   122→    'unauthenticated' in a finally block (so a network failure still logs out locally)
+   123→   123→- Built src/lib/store/onboarding-store.ts (PERSISTED with name 'glasstv-onboarding'):
+   124→   124→  - selectedGenres[], selectedLanguages[], viewingTime, viewingDevice, recommendations[]
+   125→   125→  - toggleGenre/toggleLanguage use includes-check + filter/append (idempotent toggles)
+   126→   126→  - reset() restores initialState (used after onboarding completes or user re-does it)
+   127→   127→- Ran `bun run lint` - passes cleanly with zero errors or warnings.
+   128→   128→
+   129→   129→Stage Summary:
+   130→   130→- Files produced (8 total, all NEW):
+   131→   131→  - src/components/glass/glass-card.tsx
+   132→   132→  - src/components/glass/glass-button.tsx
+   133→   133→  - src/components/glass/glass-input.tsx
+   134→   134→  - src/components/glass/gradient-button.tsx
+   135→   135→  - src/components/glass/channel-card.tsx
+   136→   136→  - src/lib/store/app-store.ts
+   137→   137→  - src/lib/store/auth-store.ts
+   138→   138→  - src/lib/store/onboarding-store.ts
+   139→   139→- Key decisions:
+   140→   140→  - All UI components are 'use client' (forwardRef + framer-motion/lucide need client)
+   141→   141→  - Stores are plain TS (no 'use client' directive) - they're imported by client
+   142→   142→    components; zustand works in both contexts
+   143→   143→  - app-store and auth-store intentionally NOT persisted so server-side getSession()
+   144→   144→    remains authoritative on reload; only onboarding-store is persisted (localStorage
+   145→   145→    key 'glasstv-onboarding') so the multi-step AI onboarding flow survives refresh
+   146→   146→  - All form/button components use React.forwardRef + displayName for react-hook-form
+   147→   147→    and ref-forwarding compatibility
+   148→   148→  - channel-card supports the emoji: logo convention the seed script uses, plus real
+   149→   149→    URLs, plus a 📺 fallback - matches the 34 seeded channels exactly
+   150→   150→  - No new packages installed; no existing files modified
+   151→   151→- Lint status: PASS (0 errors, 0 warnings)
+   152→   152→
+   153→   153→---
+   154→   154→Task ID: 2-b
+   155→   155→Agent: full-stack-developer (API routes)
+   156→   156→Task: Build all GlassTV API routes
+   157→   157→
+   158→   158→Work Log:
+   159→   159→- Read worklog.md, src/lib/session.ts, prisma/schema.prisma, src/lib/db.ts in full
+   160→   160→  before writing any code. Confirmed: single-page app (only `/` route + routes
+   161→   161→  under src/app/api/), cookie-based session helpers, Prisma + SQLite, JSON-stringified
+   162→   162→  array fields.
+   163→   163→- Created src/lib/api-auth.ts with `requireUser()` (returns SessionPayload | null),
+   164→   164→  `unauthorized()` (401 JSON), and `badRequest(msg)` (400 JSON) helpers. Reused
+   165→   165→  in every protected route.
+   166→   166→- Auth routes:
+   167→   167→  - src/app/api/auth/signup/route.ts POST: validates name/email/password (400),
+   168→   168→    enforces password length >= 6, checks duplicate email (409), hashes with
+   169→   169→    `hashPassword`, creates user with `newId()`, sets session cookie, returns
+   170→   170→    201 { user: { id, email, displayName } }.
+   171→   171→  - src/app/api/auth/login/route.ts POST: validates input, looks up user by email,
+   172→   172→    returns 401 'Invalid credentials' if not found or password verify fails,
+   173→   173→    sets session cookie on success, returns 200 { user }.
+   174→   174→  - src/app/api/auth/logout/route.ts POST: clears session cookie, returns 200 { ok: true }.
+   175→   175→  - src/app/api/auth/me/route.ts GET: requires auth (401 unauthenticated), loads
+   176→   176→    user + preferences relation, returns 200 { user: { id, email, displayName,
+   177→   177→    avatar, onboardingCompleted } } (onboardingCompleted defaults to false when
+   178→   178→    no preference row exists).
+   179→   179→- Onboarding routes:
+   180→   180→  - src/app/api/onboarding/recommendations/route.ts POST: requires auth, accepts
+   181→   181→    { genres, languages, viewingTime, viewingDevice }. Loads ALL channels from
+   182→   182→    DB, builds system + user prompts, calls `ZAI.create()` then
+   183→   183→    `zai.chat.completions.create({ messages, thinking: { type: 'disabled' } })`.
+   184→   184→    Strips markdown fences from the LLM reply and parses JSON. Validates the
+   185→   185→    returned channelIds against the real catalog and clamps to [4, 8]. On ANY
+   186→   186→    failure (LLM throws, parse fails, too few valid ids), falls back to a
+   187→   187→    deterministic heuristic that picks: genre+language match -> genre only ->
+   188→   188→    language only -> verified -> rest. The outer catch also returns a tiny
+   189→   189→    fallback list so the frontend NEVER sees a 500 from this route.
+   190→   190→  - src/app/api/onboarding/complete/route.ts POST: requires auth, accepts
+   191→   191→    { genres, languages, viewingTime, viewingDevice }, JSON-stringifies the
+   192→   192→    arrays per schema convention, `db.userPreference.upsert` by userId,
+   193→   193→    sets onboardingCompleted: true, returns 200 { ok: true }.
+   194→   194→- Channel & favorites routes:
+   195→   195→  - src/app/api/channels/route.ts GET: requires auth, supports ?category,
+   196→   196→    ?language, ?q (contains on name), ?limit (default 50, capped at 200).
+   197→   197→    Selects only public columns - `streamUrl` is NEVER returned to the client.
+   198→   198→  - src/app/api/channels/[id]/route.ts GET: requires auth, returns a single
+   199→   199→    channel by id (404 if not found), again strips streamUrl.
+   200→   200→  - src/app/api/favorites/route.ts GET + POST: GET returns the user's favorited
+   201→   201→    channels joined through the Favorite table (newest first). POST takes
+   202→   202→    { channelId }, verifies the channel exists (404), creates a Favorite row;
+   203→   203→    catches Prisma P2002 (already favorited) and returns 200 with
+   204→   204→    `alreadyFavorited: true` for idempotency. New favorites return 201.
+   205→   205→  - src/app/api/favorites/[channelId]/route.ts DELETE: requires auth, uses
+   206→   206→    `db.favorite.deleteMany` (idempotent - returns 200 even if the favorite
+   207→   207→    didn't exist).
+   208→   208→- Code-quality pass:
+   209→   209→  - All handlers wrapped in try/catch; errors logged with `console.error`
+   210→   210→    tagged with the route path; failures return `{ error: string }` with
+   211→   211→    sensible status codes (400/401/404/409/500).
+   212→   212→  - Used Next 16 typed route params signature: `{ params }: { params: Promise<{...}> }`
+   213→   213→    with `await params`.
+   214→   214→  - No `any` types; runtime body fields validated with `typeof` checks before
+   215→   215→    use.
+   216→   216→  - Imported the `Prisma` namespace from `@prisma/client` (value import, not
+   217→   217→    type-only) so `Prisma.PrismaClientKnownRequestError` is available as a
+   218→   218→    runtime class for the P2002 instanceof check.
+   219→   219→- Verified: `bun run lint` passes clean. `bunx tsc --noEmit` shows zero errors
+   220→   220→  in src/ (only pre-existing errors in examples/ and skills/ folders, which
+   221→   221→  are not part of this task).
+   222→   222→- Verified dev server is still healthy by tailing dev.log (GET / returning 200).
+   223→   223→
+   224→   224→Stage Summary:
+   225→   225→- Files produced (all under src/app/api/ + src/lib/api-auth.ts):
+   226→   226→  - src/lib/api-auth.ts
+   227→   227→  - src/app/api/auth/signup/route.ts
+   228→   228→  - src/app/api/auth/login/route.ts
+   229→   229→  - src/app/api/auth/logout/route.ts
+   230→   230→  - src/app/api/auth/me/route.ts
+   231→   231→  - src/app/api/onboarding/recommendations/route.ts
+   232→   232→  - src/app/api/onboarding/complete/route.ts
+   233→   233→  - src/app/api/channels/route.ts
+   234→   234→  - src/app/api/channels/[id]/route.ts
+   235→   235→  - src/app/api/favorites/route.ts
+   236→   236→  - src/app/api/favorites/[channelId]/route.ts
+   237→   237→- Endpoints exposed (all return JSON, all wrapped in try/catch):
+   238→   238→  - POST /api/auth/signup                       -> 201 { user }
+   239→   239→  - POST /api/auth/login                        -> 200 { user }
+   240→   240→  - POST /api/auth/logout                       -> 200 { ok: true }
+   241→   241→  - GET  /api/auth/me                           -> 200 { user: { ..., onboardingCompleted } }
+   242→   242→  - POST /api/onboarding/recommendations        -> 200 { channelIds, reasons }  (LLM + fallback)
+   243→   243→  - POST /api/onboarding/complete               -> 200 { ok: true }
+   244→   244→  - GET  /api/channels                          -> 200 { channels }  (?category, ?language, ?q, ?limit)
+   245→   245→  - GET  /api/channels/[id]                     -> 200 { channel } | 404
+   246→   246→  - GET  /api/favorites                         -> 200 { channels }
+   247→   247→  - POST /api/favorites                         -> 201 { ok: true } | 200 { ok, alreadyFavorited }
+   248→   248→  - DELETE /api/favorites/[channelId]           -> 200 { ok: true }
+   249→   249→- Key decisions:
+   250→   250→  - streamUrl is stripped from every channel payload that crosses the wire
+   251→   251→    (Phase 1 frontend doesn't need it and exposing it would be a small
+   252→   252→    security smell).
+   253→   253→  - The recommendations route is the only route allowed to swallow 500s:
+   254→   254→    it ALWAYS returns 200 with at least 4 channelIds, even if the LLM SDK
+   255→   255→    throws or the DB hiccups. Every other route surfaces errors honestly.
+   256→   256→  - Favorites POST is idempotent on P2002 (returns 200 + alreadyFavorited
+   257→   257→    flag) so the UI can call it optimistically without worrying about
+   258→   258→    duplicate-key errors.
+   259→   259→
+   260→   260→---
+   261→   261→Task ID: 3-a
+   262→   262→Agent: full-stack-developer (auth + onboarding views)
+   263→   263→Task: Build auth views (LoginForm, SignupForm) and OnboardingFlow
+   264→   264→
+   265→   265→Work Log:
+   266→   266→- Read worklog.md in full. Confirmed single-page-app constraint (no routes
+   267→   267→  under src/app/, only components + src/app/api/), the GlassTV UI primitives
+   268→   268→  in src/components/glass/ (GlassCard/GlassButton/GlassInput/GradientButton/
+   269→   269→  ChannelCard), and the Zustand stores in src/lib/store/ (app-store, auth-store,
+   270→   270→  onboarding-store). Re-read the API route signatures (signup/login/logout/me,
+   271→   271→  onboarding/recommendations, onboarding/complete, channels, favorites) to
+   272→   272→  confirm request/response shapes.
+   273→   273→- Verified dev server is healthy (GET / 200 in dev.log) and `cn` helper +
+   274→   274→  framer-motion v12 + lucide-react v0.525 are already installed. Did NOT
+   275→   275→  install any new packages.
+   276→   276→- Created src/components/auth/ directory (did not exist).
+   277→   277→
+   278→   278→- Built src/components/auth/LoginForm.tsx ('use client'):
+   279→   279→  - Centered GlassCard variant="premium" hoverable={false}, w-full max-w-md
+   280→   280→    p-8 space-y-6, with animate-slide-up entrance.
+   281→   281→  - Header: 12x12 rounded-2xl with bg-gradient-to-br from-primary to-secondary
+   282→   282→    containing a lucide Tv icon (h-6 w-6 text-primary-foreground), title
+   283→   283→    "Welcome to GlassTV", subtitle "Sign in to start watching".
+   284→   284→  - Two GlassInput fields: email (type=email, autoComplete=email) and password
+   285→   285→    (type=password, autoComplete=current-password). Both required.
+   286→   286→  - Error box: bg-destructive/10 border border-destructive/20 rounded-lg p-3
+   287→   287→    text-sm text-destructive with role="alert", shown only when error is set.
+   288→   288→  - Submit: full-width GradientButton size="lg"; text "Signing in..." while
+   289→   289→    loading, "Sign In" otherwise; disabled while loading.
+   290→   290→  - Behavior: POSTs /api/auth/login with { email, password }. On success
+   291→   291→    calls auth.setUser + auth.setStatus('authenticated') + app.goToApp('home').
+   292→   292→    On !res.ok / missing user, sets error to data.error || 'Login failed'.
+   293→   293→    Network failure also surfaces 'Login failed'.
+   294→   294→  - Footer: "Don't have an account? Sign up" text button calls
+   295→   295→    app.setView('signup').
+   296→   296→
+   297→   297→- Built src/components/auth/SignupForm.tsx ('use client'):
+   298→   298→  - Same layout as LoginForm. Title "Create Account", subtitle "Start your
+   299→   299→    personalized TV experience".
+   300→   300→  - Four GlassInput fields: name, email, password (minLength 8),
+   301→   301→    confirmPassword (minLength 8). Uses autoComplete=name/email/new-password.
+   302→   302→  - Pre-fetch validation: password.length < 8 -> "Password must be at least 8
+   303→   303→    characters"; mismatched passwords -> "Passwords do not match". Both set
+   304→   304→    error without kicking off the request.
+   305→   305→  - Submit: POSTs /api/auth/signup with { name, email, password }. On success
+   306→   306→    same auth flow as login (setUser, setStatus('authenticated'), goToApp).
+   307→   307→    Button text "Creating account..." / "Create Account".
+   308→   308→  - Footer: "Already have an account? Sign in" -> app.setView('login').
+   309→   309→
+   310→   310→- Built src/components/auth/OnboardingFlow.tsx ('use client') - the centerpiece:
+   311→   311→  - Wrapped in GlassCard variant="solid" hoverable={false}, w-full max-w-2xl
+   312→   312→    p-6 sm:p-8, with animate-slide-up entrance.
+   313→   313→  - Step type = 'welcome' | 'genres' | 'languages' | 'habits' | 'recommendations'
+   314→   314→    | 'complete'. STEP_PROGRESS map (10/30/50/70/90/100%), STEP_NUMBER map
+   315→   315→    (1..5, with both 'recommendations' and 'complete' reporting 5).
+   316→   316→  - Header row: "Step X of 5" (muted) on the left, "Skip" text button on the
+   317→   317→    right that calls onboarding.reset() + app.goToApp('home'). Below: a
+   318→   318→    h-1.5 bg-muted rounded-full track with a motion.div gradient fill
+   319→   319→    (bg-gradient-to-r from-primary to-secondary) that animates width via
+   320→   320→    framer-motion's `animate={{ width: \`${progress}%\` }}`.
+   321→   321→  - AnimatePresence mode="wait" wraps the current step. Each step is a
+   322→   322→    motion.div with key={step} and the exact transition the spec requires:
+   323→   323→    initial={{opacity:0,x:20}} animate={{opacity:1,x:0}}
+   324→   324→    exit={{opacity:0,x:-20}} transition={{duration:0.25}}.
+   325→   325→  - Welcome step: 20x20 gradient circle with Tv icon, h2 "Welcome to
+   326→   326→    GlassTV! 👋", paragraph, then a 3-col grid of mini-cards (🎯 Your
+   327→   327→    interests / 🌍 Your languages / ✨ AI recommendations). Full-width
+   328→   328→    GradientButton "Get Started" -> next.
+   329→   329→  - Genres step: 8 options (sports ⚽, news 📰, movies 🎬, documentaries 🌍,
+   330→   330→    kids 🧸, music 🎵, lifestyle ✨, international 🌐) in a 2-col grid.
+   331→   331→    Tiles are <button> with border-2 transition, selected state =
+   332→   332→    border-primary bg-primary/10 text-primary, with a Check icon. Next
+   333→   333→    button disabled until selectedGenres.length >= 3; label "Next (X/3)".
+   334→   334→  - Languages step: 7 options (en/es/fr/de/ar/hi/pt) as 2-col centered tiles,
+   335→   335→    same selected styling. Next disabled until >= 1 selected.
+   336→   336→  - Habits step: two sub-sections, each a 2-col grid. VIEWING_TIMES (morning
+   337→   337→    🌅 / afternoon ☀️ / evening 🌆 / late_night 🌙) and VIEWING_DEVICES (phone
+   338→   338→    📱 / tablet 📱 / tv 🖥️ / computer 💻), both single-select. Footer
+   339→   339→    "Get Recommendations ✨" disabled until both viewingTime and viewingDevice
+   340→   340→    are set; shows "Thinking..." while loading.
+   341→   341→  - Recommendations step: 4 skeleton rows (animate-pulse) while loadingRecs.
+   342→   342→    Once loaded, vertical <ul> of custom rows: gradient rank badge (1..N) +
+   343→   343→    emoji tile (parsed from logoUrl `emoji:` prefix, 📺 fallback) + name +
+   344→   344→    category dot + italic muted AI reason (if present) + heart button.
+   345→   345→    If more than 6 items, wraps in max-h-96 overflow-y-auto scrollbar-premium.
+   346→   346→    Empty state shows a friendly "no recommendations right now" message.
+   347→   347→    Footer: Back + GradientButton "Let's Go! 🚀" -> handleComplete.
+   348→   348→  - Complete step (fallback only - shown when recChannels came back empty):
+   349→   349→    Sparkles icon in gradient circle, "Ready to dive in?" message, Back +
+   350→   350→    "Let's Go! 🚀" button -> handleComplete.
+   351→   351→  - handleGetRecommendations: POSTs /api/onboarding/recommendations with the
+   352→   352→    4 selection fields, calls onboarding.setRecommendations(channelIds) +
+   353→   353→    setReasons(data.reasons). If channelIds empty, jumps to 'complete' step.
+   354→   354→    Otherwise fetches /api/channels?limit=200, builds a Map, resolves the
+   355→   355→    channel objects, and advances to 'recommendations'. Any error -> empty
+   356→   356→    recChannels + 'complete' step (user can still finish).
+   357→   357→  - handleComplete: POSTs /api/onboarding/complete, then
+   358→   358→    useAuthStore.getState().setUser({...user, onboardingCompleted: true}),
+   359→   359→    then onboarding.reset() + app.goToApp('home'). Wrapped in saving state.
+   360→   360→  - Heart toggle on recommendation rows is wired to the favorites API
+   361→   361→    (POST /api/favorites for add, DELETE /api/favorites/[channelId] for
+   362→   362→    remove) with optimistic local favs state map; reverts on network error.
+   363→   363→  - Code quality: every interactive element is a real <button> (no
+   364→   364→    div-with-onClick), every tile has aria-pressed, every heart button has
+   365→   365→    aria-label + aria-pressed, every image/emoji has aria-hidden or
+   366→   366→    aria-label. No `any` types anywhere - RecChannel is a proper interface,
+   367→   367→    fetch responses typed via `as { ... }` casts. Mobile-first responsive:
+   368→   368→    grids are grid-cols-2 on mobile, the welcome mini-cards collapse to
+   369→   369→    grid-cols-1 on mobile and sm:grid-cols-3 on >= sm. Padding is
+   370→   370→    p-6 sm:p-8 as specified.
+   371→   371→
+   372→   372→- Ran `bun run lint` - PASSES with ZERO errors and ZERO warnings (eslint
+   373→   373→  output is literally just `$ eslint .` with no diagnostics).
+   374→   374→- Ran `bunx tsc --noEmit` and filtered for src/components/auth/ - ZERO
+   375→   375→  TypeScript errors in any of my three files.
+   376→   376→- Verified dev.log shows healthy GET / 200 responses and the new files
+   377→   377→  compile cleanly ("✓ Compiled in 240ms" / "230ms" / "228ms").
+   378→   378→
+   379→   379→Stage Summary:
+   380→   380→- Files produced (all NEW, 3 total):
+   381→   381→  - src/components/auth/LoginForm.tsx
+   382→   382→  - src/components/auth/SignupForm.tsx
+   383→   383→  - src/components/auth/OnboardingFlow.tsx
+   384→   384→- Key decisions:
+   385→   385→  - All three components are 'use client' (they use useState + fetch +
+   386→   386→    framer-motion + zustand hooks).
+   387→   387→  - Auth forms wrap themselves in a min-h-screen flex centering wrapper so
+   388→   388→    they own their layout regardless of where page.tsx places them.
+   389→   389→  - OnboardingFlow uses local useState for step + loadingRecs + saving +
+   390→   390→    reasons + recChannels + favs (transient UI state that doesn't need
+   391→   391→    persistence), while the user's actual selections (genres/languages/
+   392→   392→    viewingTime/viewingDevice/recommendations) live in the persisted
+   393→   393→    useOnboardingStore so a refresh mid-flow doesn't lose progress.
+   394→   394→  - The 'complete' step is a true fallback path: only entered when the
+   395→   395→    recommendations API returns zero channel ids or the fetch throws. The
+   396→   396→    happy path is welcome -> genres -> languages -> habits -> recommendations
+   397→   397→    -> (Let's Go -> handleComplete -> reset + goToApp).
+   398→   398→  - Heart buttons on recommendation rows are fully wired to the favorites
+   399→   399→    API (optimistic with revert on failure), giving the user a richer
+   400→   400→    onboarding experience than a static display.
+   401→   401→  - The progress bar uses framer-motion's `animate={{ width }}` for a
+   402→   402→    smooth tween between steps (initial={false} so the first render doesn't
+   403→   403→    animate from 0).
+   404→   404→  - Every interactive element is a real <button> with aria-pressed /
+   405→   405→    aria-label / focus-ring for full keyboard + screen-reader accessibility.
+   406→   406→- Lint status: PASS (0 errors, 0 warnings)
+   407→   407→- TypeScript status: PASS (0 errors in src/components/auth/)
+   408→   408→- No new packages installed; no existing files modified.
+   409→   409→
+   410→   410→---
+   411→   411→
+   412→   412→Task ID: 3-b
+   413→   413→Agent: full-stack-developer (main layout + views)
+   414→   414→Task: Build main app layout (Sidebar, BottomNav, Header) and the four main views
+   415→   415→
+   416→   416→Work Log:
+   417→   417→- Read worklog.md in full to understand prior work: design tokens in globals.css
+   418→   418→  (glass-premium, card-solid, btn-gradient, focus-ring, scrollbar-premium,
+   419→   419→  animate-slide-up, animate-fade-in), Prisma schema (Channel without streamUrl
+   420→   420→  on the wire), the GlassTV UI components in src/components/glass/ (GlassCard,
+   421→   421→  GlassButton, GlassInput, GradientButton, ChannelCard), the Zustand stores
+   422→   422→  (app-store view/activeTab/setActiveTab/goToApp, auth-store user/status/logout,
+   423→   423→  onboarding-store), and the API routes from task 2-b (channels list/detail,
+   424→   424→  favorites GET/POST/DELETE, auth/me, onboarding complete/recommendations).
+   425→   425→- Confirmed single-page-app constraint: NO new routes under src/app/. Everything
+   426→   426→  renders client-side via useAppStore.view === 'app' + activeTab. AppShell is
+   427→   427→  the only top-level authenticated layout component.
+   428→   428→- Built src/lib/types.ts exporting the shared Channel interface plus
+   429→   429→  CHANNEL_CATEGORIES and CHANNEL_LANGUAGES consts (the 8 onboarding genres
+   430→   430→  and the 7 supported languages).
+   431→   431→- Built src/lib/hooks/use-favorites.ts - a useFavorites() hook returning
+   432→   432→  { favoriteIds: Set<string>, isFavorite, toggleFavorite, refresh, loading }.
+   433→   433→  On mount it GETs /api/favorites. toggleFavorite is OPTIMISTIC: it flips the
+   434→   434→  Set immediately, then fires POST /api/favorites or DELETE /api/favorites/[id]
+   435→   435→  in the background, and reverts the Set on network failure. All four tab views
+   436→   436→  share this single source of truth so heart UI stays consistent and snappy.
+   437→   437→- Built src/components/main/channel-card-skeleton.tsx with ChannelCardSkeleton
+   438→   438→  and ChannelCardGridSkeleton - matches the ChannelCard visual footprint so
+   439→   439→  loading state doesn't shift layout. Uses the shadcn Skeleton (animate-pulse).
+   440→   440→- Built src/components/main/sidebar.tsx - desktop-only fixed left sidebar
+   441→   441→  (hidden lg:flex). Logo row (gradient box w/ Tv icon + GlassTV wordmark),
+   442→   442→  nav (Home/Guide/Favorites/Profile) with active=bg-primary/10 text-primary
+   443→   443→  and inactive=text-foreground/70 hover:bg-muted, and a profile shortcut at
+   444→   444→  the bottom showing avatar (or initials gradient circle) + displayName + email
+   445→   445→  that calls setActiveTab('profile').
+   446→   446→- Built src/components/main/bottom-nav.tsx - mobile-only fixed bottom nav
+   447→   447→  (lg:hidden). Four buttons with lucide icons; active item gets a gradient
+   448→   448→  underline bar (absolute -top-0.5 w-8 h-0.5 from-primary to-secondary) and
+   449→   449→  icon scale-110. Adds pb-[env(safe-area-inset-bottom)] for iOS safe area.
+   450→   450→- Built src/components/main/header.tsx - sticky top header (glass-premium).
+   451→   451→  Left: search form with absolute-positioned Search icon; on submit writes
+   452→   452→  the query to sessionStorage['glasstv-search'] (exported as SEARCH_SESSION_KEY)
+   453→   453→  and calls setActiveTab('guide'). Right: Bell icon button (visual only),
+   454→   454→  displayName (hidden <sm), and a GlassButton variant=ghost size=icon with
+   455→   455→  LogOut icon that calls auth.logout() then setView('landing').
+   456→   456→- Built src/components/main/home-view.tsx - personalized landing. Fetches
+   457→   457→  /api/channels?limit=20 on mount + uses useFavorites. Hero card with gradient
+   458→   458→  background + greeting based on hour (<12 morning, <18 afternoon, else evening)
+   459→   459→  + displayName + subtitle that depends on user.onboardingCompleted. Three
+   460→   460→  sections: Continue Watching (4 cards - user's favorites or first 4 verified),
+   461→   461→  Recommended for You (up to 8 verified cards), All Channels (horizontal
+   462→   462→  scroller, min-w-[180px] each). Each card wires favorited + onToggleFavorite.
+   463→   463→- Built src/components/main/guide-view.tsx - full channel guide. Filter bar
+   464→   464→  with: search input (seeded from sessionStorage on mount), 9 category chips
+   465→   465→  (All + 8 genres, active=bg-primary text-primary-foreground), and a shadcn
+   466→   466→  Select for language (All + en/es/fr/de/hi/ar/pt). Search is debounced 250ms
+   467→   467→  via a separate debouncedSearch state. Fetches /api/channels with category/
+   468→   468→  language/q/limit=100 whenever filters change. Shows skeleton grid while
+   469→   469→  loading, an empty-state card with a "Clear all filters" button when no
+   470→   470→  results, and a responsive 2/3/4-col grid of ChannelCards otherwise.
+   471→   471→- Built src/components/main/favorites-view.tsx - GETs /api/favorites on mount,
+   472→   472→  keeps the list in sync with useFavorites' Set (filters rendered cards by
+   473→   473→  favoriteIds). When the user taps a heart on a favorited card, it DELETEs
+   474→   474→  AND removes the card from the local list so the card disappears. Empty
+   475→   475→  state shows a big Heart icon in a muted circle + "Browse channels" CTA.
+   476→   476→- Built src/components/main/profile-view.tsx - identity GlassCard (avatar or
+   477→   477→  initials gradient circle, displayName, email, "GlassTV Member" + onboarding
+   478→   478→  status badges), a 2-col stats grid (favorites count from useFavorites,
+   479→   479→  channels available from /api/channels?limit=200), a Preferences card with a
+   480→   480→  "Re-run onboarding" / "Complete onboarding" button that calls setView('onboarding'),
+   481→   481→  and a Session card with a "Sign out" button.
+   482→   482→- Built src/components/main/app-shell.tsx - the top-level layout. Outer div
+   483→   483→  is min-h-screen bg-background flex flex-col. Renders <Sidebar />, <BottomNav />,
+   484→   484→  then a content column with flex-1 lg:pl-64 pb-20 lg:pb-0 flex flex-col
+   485→   485→  min-h-screen. Inside that: <Header />, <main className="flex-1 container mx-auto
+   486→   486→  px-4 py-6 max-w-6xl"> wrapping an AnimatePresence/motion.div keyed on activeTab
+   487→   487→  (opacity+y 8px transition 0.2s) that switches to Home/Guide/Favorites/ProfileView,
+   488→   488→  and a <footer className="mt-auto ..."> with "GlassTV · Phase 1 · AI-Powered IPTV".
+   489→   489→  This satisfies the sticky-footer requirement (footer pinned to bottom on
+   490→   490→  short content, pushed down on long content).
+   491→   491→- Ran `bun run lint` - initially flagged 2 unused eslint-disable comments for
+   492→   492→  @next/next/no-img-element (the rule is already off in eslint.config.mjs, so
+   493→   493→  the disable directives were redundant). Removed both directives; lint now
+   494→   494→  passes with 0 errors and 0 warnings.
+   495→   495→- Ran `bunx tsc --noEmit` - zero errors in src/ (only pre-existing errors in
+   496→   496→  examples/ and skills/ folders which are eslint-ignored and not part of this
+   497→   497→  task).
+   498→   498→- Verified dev.log shows the dev server is still healthy (GET / returning 200s).
+   499→   499→
+   500→   500→Stage Summary:
+   501→   501→- Files produced (11 total, all NEW):
+   502→   502→  - src/lib/types.ts
+   503→   503→  - src/lib/hooks/use-favorites.ts
+   504→   504→  - src/components/main/channel-card-skeleton.tsx
+   505→   505→  - src/components/main/sidebar.tsx
+   506→   506→  - src/components/main/bottom-nav.tsx
+   507→   507→  - src/components/main/header.tsx
+   508→   508→  - src/components/main/home-view.tsx
+   509→   509→  - src/components/main/guide-view.tsx
+   510→   510→  - src/components/main/favorites-view.tsx
+   511→   511→  - src/components/main/profile-view.tsx
+   512→   512→  - src/components/main/app-shell.tsx
+   513→   513→- Also wrote: agent-ctx/3-b-main-layout-and-views.md (work record for downstream agents)
+   514→   514→- Key decisions:
+   515→   515→  - useFavorites() hook is the single source of truth for the heart UI across
+   516→   516→    Home/Guide/Favorites/Profile. Optimistic toggle + revert-on-failure keeps
+   517→   517→    the UI snappy and consistent without duplicating fetch logic in each view.
+   518→   518→  - Header-to-GuideView search handoff via sessionStorage['glasstv-search']
+   519→   519→    (no extra zustand slice needed for Phase 1).
+   520→   520→  - GuideView search input is debounced 250ms via a separate debouncedSearch
+   521→   521→    state so we don't fire a request on every keystroke.
+   522→   522→  - Sticky footer pattern: min-h-screen flex flex-col outer + flex-1 flex flex-col
+   523→   523→    min-h-screen content column + flex-1 main + mt-auto footer.
+   524→   524→  - Mobile safe area: BottomNav adds pb-[env(safe-area-inset-bottom)].
+   525→   525→  - All nav items are <button> calling useAppStore.setActiveTab (no Next.js
+   526→   526→    routing) - this is a SPA driven entirely by Zustand view state.
+   527→   527→  - No `any` types; fetch responses typed via small local interfaces.
+   528→   528→  - Reused shadcn Select + Skeleton; no new packages installed.
+   529→   529→- Integration note for the next agent (page.tsx wiring):
+   530→   530→  When `useAppStore().view === 'app'`, render `<AppShell />` from
+   531→   531→  `@/components/main/app-shell`. The shell handles everything else
+   532→   532→  (sidebar/bottom-nav/header/view-switching/footer) internally.
+   533→   533→- Lint status: PASS (0 errors, 0 warnings). tsc: clean for src/.
+   534→   534→
+   535→   535→---
+   536→   536→Task ID: 4
+   537→   537→Agent: Main (orchestrator)
+   538→   538→Task: Wire up the `/` page SPA orchestrator, landing page, and final integration/verification
+   539→   539→
+   540→   540→Work Log:
+   541→   541→- Created src/components/glass/index.ts barrel export so `@/components/glass` resolves all Glass* components
+   542→   542→- Created src/components/landing/landing-page.tsx - a polished marketing/intro screen with:
+   543→   543→  - Sticky glass header (logo + Sign in / Get started CTAs)
+   544→   544→  - Hero with gradient blobs, headline, CTAs, genre pills, and an app mockup card
+   545→   545→  - 4 feature cards (AI Recommendations, Channels Everywhere, Multilingual Subtitles, Any Screen)
+   546→   546→  - Final CTA section + sticky footer
+   547→   547→- Rewrote src/app/page.tsx as the SPA orchestrator:
+   548→   548→  - On mount: probes /api/auth/me to hydrate the auth store
+   549→   549→  - Authed + onboardingCompleted -> AppShell
+   550→   550→  - Authed + not onboarded -> OnboardingFlow
+   551→   551→  - Unauthed -> LandingPage / LoginForm / SignupForm based on view state
+   552→   552→  - LoadingScreen with animated GlassTV logo while probing session
+   553→   553→  - OnboardingWrapper auto-skips to app if onboarding already completed
+   554→   554→- Fixed a routing bug: SignupForm/LoginForm were calling goToApp('home') directly,
+   555→   555→  bypassing onboarding for new users. Fixed by:
+   556→   556→  - Updated /api/auth/signup to return onboardingCompleted:false + avatar
+   557→   557→  - Updated /api/auth/login to include preferences relation + return onboardingCompleted + avatar
+   558→   558→  - LoginForm now routes to onboarding if !onboardingCompleted, else goToApp('home')
+   559→   559→  - SignupForm now routes to onboarding (new users always need it)
+   560→   560→- Updated src/app/layout.tsx metadata to GlassTV branding
+   561→   561→
+   562→   562→Verification (Agent Browser end-to-end):
+   563→   563→- Landing page renders with hero, features, CTAs (verified via snapshot + VLM)
+   564→   564→- Signup flow: create account -> onboarding triggers correctly
+   565→   565→- Onboarding wizard: welcome -> genres (3+ required) -> languages -> habits -> AI recommendations -> complete
+   566→   566→- AI recommendations: POST /api/onboarding/recommendations returned 200 in 3.9s with 8 personalized channels matching the user's sports/movies/music + English/French preferences (LLM skill working)
+   567→   567→- Onboarding completion -> Home view with AppShell
+   568→   568→- Desktop: sidebar nav (Home/Guide/Favorites/Profile) + header (search/notifications/signout)
+   569→   569→- Mobile (390x844): bottom nav replaces sidebar, content reflows correctly
+   570→   570→- Guide view: category chips (All + 8 genres) + language filter + search + channel grid
+   571→   571→- Favorites: add from Guide -> appears in Favorites tab -> remove works
+   572→   572→- Profile: shows user info + Re-run onboarding + Sign out
+   573→   573→- Sign out -> returns to landing page
+   574→   574→- Returning user login -> skips onboarding, goes straight to Home
+   575→   575→- Sticky footer present ("GlassTV · Phase 1 · AI-Powered IPTV") via eval check
+   576→   576→- No console errors, no page errors
+   577→   577→- Lint: 0 errors, 0 warnings
+   578→   578→- VLM verdict on home: "high-fidelity, professional UI design that looks ready for production"
+   579→   579→- VLM verdict on landing: "polished, professional landing page", "modern, high-end aesthetic"
+   580→   580→
+   581→   581→Stage Summary:
+   582→   582→- GlassTV Phase 1 is fully functional and visually polished
+   583→   583→- Complete file inventory:
+   584→   584→  * prisma/schema.prisma (5 models)
+   585→   585→  * src/lib/session.ts (cookie auth + scrypt hashing)
+   586→   586→  * src/lib/api-auth.ts (requireUser/unauthorized helpers)
+   587→   587→  * src/lib/types.ts (Channel interface + constants)
+   588→   588→  * src/lib/hooks/use-favorites.ts (optimistic favorites hook)
+   589→   589→  * src/lib/store/{app,auth,onboarding}-store.ts (Zustand SPA state)
+   590→   590→  * src/components/glass/{glass-card,glass-button,glass-input,gradient-button,channel-card,index}.tsx
+   591→   591→  * src/components/auth/{LoginForm,SignupForm,OnboardingFlow}.tsx
+   592→   592→  * src/components/main/{app-shell,sidebar,bottom-nav,header,home-view,guide-view,favorites-view,profile-view,channel-card-skeleton}.tsx
+   593→   593→  * src/components/landing/landing-page.tsx
+   594→   594→  * src/app/page.tsx (SPA orchestrator)
+   595→   595→  * src/app/layout.tsx (updated metadata)
+   596→   596→  * src/app/globals.css (GlassTV design system)
+   597→   597→  * src/app/api/auth/{signup,login,logout,me}/route.ts
+   598→   598→  * src/app/api/onboarding/{recommendations,complete}/route.ts
+   599→   599→  * src/app/api/channels/{route,[id]/route}.ts
+   600→   600→  * src/app/api/favorites/{route,[channelId]/route}.ts
+   601→   601→  * scripts/seed.ts (34 channels across 8 genres)
+   602→   602→- Database: 34 seeded channels, test users created during verification
+   603→   603→- All 8 verification checklist items from the original spec pass:
+   604→   604→  [x] dev server starts without errors
+   605→   605→  [x] /login (view) loads with glassmorphism design
+   606→   606→  [x] /signup (view) loads correctly
+   607→   607→  [x] user can create an account
+   608→   608→  [x] user can log in
+   609→   609→  [x] after login, redirected to onboarding (new) or home (returning)
+   610→   610→  [x] onboarding flow works (genres -> languages -> habits -> AI recommendations)
+   611→   611→  [x] onboarding data saved to database (UserPreference row created)
+   612→   612→  [x] /home (view) loads with channel grid
+   613→   613→  [x] mobile bottom nav appears on small screens
+   614→   614→  [x] desktop sidebar appears on large screens
+   615→   615→

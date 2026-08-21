@@ -1,0 +1,1387 @@
+     1→I have completed Phase 1 of my GlassTV project. I now have:
+     2→
+     3→Next.js 15 with App Router
+     4→
+     5→Neon PostgreSQL with Drizzle ORM
+     6→
+     7→Authentication (login/signup)
+     8→
+     9→AI Onboarding flow
+    10→
+    11→Tailwind CSS with our design system (Indigo/Violet, solid cards, glass accents)
+    12→
+    13→Main layout with bottom navigation (mobile) and sidebar (desktop)
+    14→
+    15→Now I need Phase 2: IPTV Integration, Channel Grid & Preview Popup.
+    16→
+    17→PHASE 2 GOALS
+    18→IPTV Source Integration – Fetch and parse M3U playlists from free IPTV sources
+    19→
+    20→Channel Database Sync – Store channels in Neon PostgreSQL with caching
+    21→
+    22→Channel Grid UI – Display channels in a responsive card-based grid
+    23→
+    24→The "Preview Popup" – The unique mini-player popup that auto-appears on login
+    25→
+    26→Channel Search & Filter – Basic search and category filtering
+    27→
+    28→1. NEW DEPENDENCIES
+    29→Add these to package.json:
+    30→
+    31→json
+    32→{
+    33→  "dependencies": {
+    34→    "@iptv/playlist": "^1.0.0",
+    35→    "hls.js": "^0.14.17",
+    36→    "react-ts-hls-player": "^1.0.0",
+    37→    "use-debounce": "^10.0.0"
+    38→  }
+    39→}
+    40→Run:
+    41→
+    42→bash
+    43→npm install @iptv/playlist hls.js react-ts-hls-player use-debounce
+    44→2. IPTV SOURCE CONFIGURATION
+    45→Create lib/iptv/sources.ts:
+    46→
+    47→typescript
+    48→// lib/iptv/sources.ts
+    49→
+    50→export interface IPTVSource {
+    51→  id: string;
+    52→  name: string;
+    53→  url: string;
+    54→  type: 'm3u' | 'm3u8';
+    55→  country?: string;
+    56→  language?: string;
+    57→  enabled: boolean;
+    58→}
+    59→
+    60→export const IPTV_SOURCES: IPTVSource[] = [
+    61→  {
+    62→    id: 'iptv-org-global',
+    63→    name: 'IPTV-org Global',
+    64→    url: 'https://iptv-org.github.io/iptv/index.m3u',
+    65→    type: 'm3u',
+    66→    enabled: true,
+    67→  },
+    68→  {
+    69→    id: 'iptv-org-english',
+    70→    name: 'IPTV-org English',
+    71→    url: 'https://iptv-org.github.io/iptv/languages/eng.m3u',
+    72→    type: 'm3u',
+    73→    language: 'en',
+    74→    enabled: true,
+    75→  },
+    76→  {
+    77→    id: 'free-tv-global',
+    78→    name: 'Free-TV Global',
+    79→    url: 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8',
+    80→    type: 'm3u8',
+    81→    enabled: true,
+    82→  },
+    83→  {
+    84→    id: 'world-iptv',
+    85→    name: 'World IPTV',
+    86→    url: 'https://romaxa55.github.io/world_ip_tv/output/index.m3u',
+    87→    type: 'm3u',
+    88→    enabled: true,
+    89→  },
+    90→];
+    91→
+    92→export const DEFAULT_SOURCES = IPTV_SOURCES.filter(s => s.enabled).map(s => s.url);
+    93→3. M3U PARSER UTILITY
+    94→Create lib/iptv/parser.ts:
+    95→
+    96→typescript
+    97→// lib/iptv/parser.ts
+    98→
+    99→import { parse } from '@iptv/playlist';
+   100→
+   101→export interface Channel {
+   102→  id: string;
+   103→  name: string;
+   104→  logoUrl: string | null;
+   105→  streamUrl: string;
+   106→  category: string | null;
+   107→  country: string | null;
+   108→  language: string | null;
+   109→  isVerified: boolean;
+   110→  tvgId?: string;
+   111→  tvgName?: string;
+   112→  tvgLogo?: string;
+   113→  groupTitle?: string;
+   114→}
+   115→
+   116→export interface ParseResult {
+   117→  channels: Channel[];
+   118→  total: number;
+   119→  source: string;
+   120→}
+   121→
+   122→/**
+   123→ * Parse an M3U/M3U8 playlist content into structured channel data
+   124→ */
+   125→export async function parseM3UPlaylist(content: string, sourceUrl: string): Promise<ParseResult> {
+   126→  const channels: Channel[] = [];
+   127→  
+   128→  try {
+   129→    // Parse using @iptv/playlist
+   130→    const parsed = parse(content);
+   131→    
+   132→    for (const item of parsed.items) {
+   133→      // Extract channel info from EXTINF and tags
+   134→      const extinf = item.extinf || {};
+   135→      
+   136→      // Build channel object
+   137→      const channel: Channel = {
+   138→        id: generateChannelId(item.url, extinf.name || ''),
+   139→        name: extinf.name || 'Unknown Channel',
+   140→        logoUrl: extinf['tvg-logo'] || null,
+   141→        streamUrl: item.url,
+   142→        category: extinf['group-title'] || null,
+   143→        country: extinf['tvg-country'] || null,
+   144→        language: extinf['tvg-language'] || null,
+   145→        isVerified: false,
+   146→        tvgId: extinf['tvg-id'],
+   147→        tvgName: extinf['tvg-name'],
+   148→        tvgLogo: extinf['tvg-logo'],
+   149→        groupTitle: extinf['group-title'],
+   150→      };
+   151→      
+   152→      channels.push(channel);
+   153→    }
+   154→    
+   155→    return {
+   156→      channels,
+   157→      total: channels.length,
+   158→      source: sourceUrl,
+   159→    };
+   160→  } catch (error) {
+   161→    console.error('Failed to parse M3U playlist:', error);
+   162→    throw new Error(`Failed to parse playlist from ${sourceUrl}`);
+   163→  }
+   164→}
+   165→
+   166→/**
+   167→ * Generate a unique channel ID
+   168→ */
+   169→function generateChannelId(url: string, name: string): string {
+   170→  const cleanName = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+   171→  const urlHash = Buffer.from(url).toString('base64').substring(0, 8);
+   172→  return `${cleanName}-${urlHash}`;
+   173→}
+   174→
+   175→/**
+   176→ * Fetch and parse a playlist from a URL
+   177→ */
+   178→export async function fetchAndParsePlaylist(url: string): Promise<ParseResult> {
+   179→  try {
+   180→    const response = await fetch(url, {
+   181→      headers: {
+   182→        'User-Agent': 'GlassTV/1.0',
+   183→      },
+   184→      signal: AbortSignal.timeout(30000), // 30 second timeout
+   185→    });
+   186→    
+   187→    if (!response.ok) {
+   188→      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+   189→    }
+   190→    
+   191→    const content = await response.text();
+   192→    return await parseM3UPlaylist(content, url);
+   193→  } catch (error) {
+   194→    console.error(`Failed to fetch playlist from ${url}:`, error);
+   195→    throw error;
+   196→  }
+   197→}
+   198→4. CHANNEL SYNC API
+   199→Create app/api/channels/sync/route.ts:
+   200→
+   201→typescript
+   202→// app/api/channels/sync/route.ts
+   203→
+   204→import { NextResponse } from 'next/server';
+   205→import { db } from '@/lib/db';
+   206→import { channels } from '@/lib/db/schema';
+   207→import { IPTV_SOURCES, DEFAULT_SOURCES } from '@/lib/iptv/sources';
+   208→import { fetchAndParsePlaylist, type Channel } from '@/lib/iptv/parser';
+   209→import { eq, and } from 'drizzle-orm';
+   210→
+   211→export const maxDuration = 300; // 5 minutes for large playlists
+   212→
+   213→export async function POST(req: Request) {
+   214→  try {
+   215→    const { sources = DEFAULT_SOURCES } = await req.json();
+   216→    
+   217→    const results = {
+   218→      totalChannels: 0,
+   219→      newChannels: 0,
+   220→      updatedChannels: 0,
+   221→      failedSources: [] as string[],
+   222→      sourcesProcessed: 0,
+   223→    };
+   224→    
+   225→    // Process each source
+   226→    for (const sourceUrl of sources) {
+   227→      try {
+   228→        const parsed = await fetchAndParsePlaylist(sourceUrl);
+   229→        results.sourcesProcessed++;
+   230→        
+   231→        // Upsert channels to database
+   232→        for (const channel of parsed.channels) {
+   233→          const existing = await db
+   234→            .select()
+   235→            .from(channels)
+   236→            .where(eq(channels.id, channel.id))
+   237→            .limit(1);
+   238→          
+   239→          if (existing.length === 0) {
+   240→            // New channel
+   241→            await db.insert(channels).values({
+   242→              id: channel.id,
+   243→              name: channel.name,
+   244→              logoUrl: channel.logoUrl,
+   245→              streamUrl: channel.streamUrl,
+   246→              category: channel.category,
+   247→              country: channel.country,
+   248→              language: channel.language,
+   249→              isVerified: false,
+   250→              lastUpdated: new Date(),
+   251→            });
+   252→            results.newChannels++;
+   253→          } else {
+   254→            // Update existing channel if changed
+   255→            const existingChannel = existing[0];
+   256→            const needsUpdate = 
+   257→              existingChannel.name !== channel.name ||
+   258→              existingChannel.logoUrl !== channel.logoUrl ||
+   259→              existingChannel.streamUrl !== channel.streamUrl ||
+   260→              existingChannel.category !== channel.category;
+   261→            
+   262→            if (needsUpdate) {
+   263→              await db
+   264→                .update(channels)
+   265→                .set({
+   266→                  name: channel.name,
+   267→                  logoUrl: channel.logoUrl,
+   268→                  streamUrl: channel.streamUrl,
+   269→                  category: channel.category,
+   270→                  country: channel.country,
+   271→                  language: channel.language,
+   272→                  lastUpdated: new Date(),
+   273→                })
+   274→                .where(eq(channels.id, channel.id));
+   275→              results.updatedChannels++;
+   276→            }
+   277→          }
+   278→          results.totalChannels++;
+   279→        }
+   280→      } catch (error) {
+   281→        console.error(`Failed to process source ${sourceUrl}:`, error);
+   282→        results.failedSources.push(sourceUrl);
+   283→      }
+   284→    }
+   285→    
+   286→    return NextResponse.json({
+   287→      success: true,
+   288→      message: 'Channel sync completed',
+   289→      data: results,
+   290→    });
+   291→    
+   292→  } catch (error) {
+   293→    console.error('Channel sync error:', error);
+   294→    return NextResponse.json(
+   295→      { error: 'Failed to sync channels', details: String(error) },
+   296→      { status: 500 }
+   297→    );
+   298→  }
+   299→}
+   300→5. CHANNELS API (GET)
+   301→Create app/api/channels/route.ts:
+   302→
+   303→typescript
+   304→// app/api/channels/route.ts
+   305→
+   306→import { NextResponse } from 'next/server';
+   307→import { db } from '@/lib/db';
+   308→import { channels } from '@/lib/db/schema';
+   309→import { and, eq, ilike, desc, asc, SQL } from 'drizzle-orm';
+   310→
+   311→export async function GET(req: Request) {
+   312→  try {
+   313→    const { searchParams } = new URL(req.url);
+   314→    
+   315→    const page = parseInt(searchParams.get('page') || '1');
+   316→    const limit = parseInt(searchParams.get('limit') || '20');
+   317→    const category = searchParams.get('category');
+   318→    const country = searchParams.get('country');
+   319→    const search = searchParams.get('search');
+   320→    const sort = searchParams.get('sort') || 'name';
+   321→    const order = searchParams.get('order') || 'asc';
+   322→    
+   323→    const offset = (page - 1) * limit;
+   324→    
+   325→    // Build where clause
+   326→    const conditions: SQL[] = [];
+   327→    
+   328→    if (category) {
+   329→      conditions.push(eq(channels.category, category));
+   330→    }
+   331→    
+   332→    if (country) {
+   333→      conditions.push(eq(channels.country, country));
+   334→    }
+   335→    
+   336→    if (search) {
+   337→      conditions.push(
+   338→        ilike(channels.name, `%${search}%`)
+   339→      );
+   340→    }
+   341→    
+   342→    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+   343→    
+   344→    // Get total count
+   345→    const countResult = await db
+   346→      .select({ count: sql<number>`count(*)` })
+   347→      .from(channels)
+   348→      .where(whereClause);
+   349→    
+   350→    const total = countResult[0]?.count || 0;
+   351→    
+   352→    // Get channels
+   353→    const sortColumn = sort === 'name' ? channels.name : channels.lastUpdated;
+   354→    const sortOrder = order === 'asc' ? asc(sortColumn) : desc(sortColumn);
+   355→    
+   356→    const channelList = await db
+   357→      .select()
+   358→      .from(channels)
+   359→      .where(whereClause)
+   360→      .orderBy(sortOrder)
+   361→      .limit(limit)
+   362→      .offset(offset);
+   363→    
+   364→    // Get unique categories for filtering
+   365→    const categories = await db
+   366→      .selectDistinct({ category: channels.category })
+   367→      .from(channels)
+   368→      .where(sql`${channels.category} IS NOT NULL`);
+   369→    
+   370→    return NextResponse.json({
+   371→      data: channelList,
+   372→      pagination: {
+   373→        page,
+   374→        limit,
+   375→        total,
+   376→        totalPages: Math.ceil(total / limit),
+   377→      },
+   378→      filters: {
+   379→        categories: categories.map(c => c.category).filter(Boolean),
+   380→      },
+   381→    });
+   382→    
+   383→  } catch (error) {
+   384→    console.error('Channels API error:', error);
+   385→    return NextResponse.json(
+   386→      { error: 'Failed to fetch channels' },
+   387→      { status: 500 }
+   388→    );
+   389→  }
+   390→}
+   391→6. CHANNEL GRID COMPONENT
+   392→Create components/channels/ChannelGrid.tsx:
+   393→
+   394→typescript
+   395→// components/channels/ChannelGrid.tsx
+   396→
+   397→'use client';
+   398→
+   399→import { useState, useEffect, useCallback } from 'react';
+   400→import { useRouter } from 'next/navigation';
+   401→import { useDebounce } from 'use-debounce';
+   402→import { Search, Filter, X, ChevronDown, Loader2 } from 'lucide-react';
+   403→import { GlassCard } from '@/components/ui/GlassCard';
+   404→import { GradientButton } from '@/components/ui/GradientButton';
+   405→import { GlassButton } from '@/components/ui/GlassButton';
+   406→import { cn } from '@/lib/utils/cn';
+   407→
+   408→interface Channel {
+   409→  id: string;
+   410→  name: string;
+   411→  logoUrl: string | null;
+   412→  streamUrl: string;
+   413→  category: string | null;
+   414→  country: string | null;
+   415→  language: string | null;
+   416→  isVerified: boolean;
+   417→}
+   418→
+   419→interface ChannelGridProps {
+   420→  initialChannels?: Channel[];
+   421→  initialCategories?: string[];
+   422→  onChannelSelect?: (channel: Channel) => void;
+   423→  showPreview?: boolean;
+   424→}
+   425→
+   426→export function ChannelGrid({ 
+   427→  initialChannels = [], 
+   428→  initialCategories = [],
+   429→  onChannelSelect,
+   430→  showPreview = true,
+   431→}: ChannelGridProps) {
+   432→  const router = useRouter();
+   433→  const [channels, setChannels] = useState<Channel[]>(initialChannels);
+   434→  const [categories, setCategories] = useState<string[]>(initialCategories);
+   435→  const [loading, setLoading] = useState(false);
+   436→  const [loadingMore, setLoadingMore] = useState(false);
+   437→  const [page, setPage] = useState(1);
+   438→  const [totalPages, setTotalPages] = useState(1);
+   439→  const [search, setSearch] = useState('');
+   440→  const [debouncedSearch] = useDebounce(search, 300);
+   441→  const [selectedCategory, setSelectedCategory] = useState<string>('');
+   442→  const [showFilters, setShowFilters] = useState(false);
+   443→  const [hasMore, setHasMore] = useState(true);
+   444→
+   445→  const fetchChannels = useCallback(async (reset = false) => {
+   446→    const currentPage = reset ? 1 : page;
+   447→    setLoading(reset);
+   448→    setLoadingMore(!reset);
+   449→
+   450→    try {
+   451→      const params = new URLSearchParams({
+   452→        page: String(currentPage),
+   453→        limit: '20',
+   454→        ...(selectedCategory && { category: selectedCategory }),
+   455→        ...(debouncedSearch && { search: debouncedSearch }),
+   456→      });
+   457→
+   458→      const response = await fetch(`/api/channels?${params}`);
+   459→      const data = await response.json();
+   460→
+   461→      if (reset) {
+   462→        setChannels(data.data);
+   463→        setTotalPages(data.pagination.totalPages);
+   464→        setCategories(data.filters.categories || []);
+   465→      } else {
+   466→        setChannels(prev => [...prev, ...data.data]);
+   467→      }
+   468→
+   469→      setHasMore(currentPage < data.pagination.totalPages);
+   470→      setPage(data.pagination.page);
+   471→    } catch (error) {
+   472→      console.error('Failed to fetch channels:', error);
+   473→    } finally {
+   474→      setLoading(false);
+   475→      setLoadingMore(false);
+   476→    }
+   477→  }, [page, selectedCategory, debouncedSearch]);
+   478→
+   479→  // Initial load and filter changes
+   480→  useEffect(() => {
+   481→    fetchChannels(true);
+   482→  }, [selectedCategory, debouncedSearch]);
+   483→
+   484→  // Load more
+   485→  const loadMore = () => {
+   486→    if (hasMore && !loadingMore) {
+   487→      setPage(prev => prev + 1);
+   488→      fetchChannels(false);
+   489→    }
+   490→  };
+   491→
+   492→  const handleChannelClick = (channel: Channel) => {
+   493→    if (onChannelSelect) {
+   494→      onChannelSelect(channel);
+   495→    } else {
+   496→      router.push(`/player/${channel.id}`);
+   497→    }
+   498→  };
+   499→
+   500→  // Clear filters
+   501→  const clearFilters = () => {
+   502→    setSearch('');
+   503→    setSelectedCategory('');
+   504→    setShowFilters(false);
+   505→  };
+   506→
+   507→  return (
+   508→    <div className="space-y-6">
+   509→      {/* Search & Filters Bar */}
+   510→      <div className="flex flex-col sm:flex-row gap-4">
+   511→        <div className="relative flex-1">
+   512→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+   513→          <input
+   514→            type="text"
+   515→            placeholder="Search channels..."
+   516→            value={search}
+   517→            onChange={(e) => setSearch(e.target.value)}
+   518→            className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+   519→          />
+   520→          {search && (
+   521→            <button
+   522→              onClick={() => setSearch('')}
+   523→              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+   524→            >
+   525→              <X className="w-4 h-4" />
+   526→            </button>
+   527→          )}
+   528→        </div>
+   529→
+   530→        <div className="flex gap-2">
+   531→          <GlassButton
+   532→            variant="secondary"
+   533→            size="sm"
+   534→            onClick={() => setShowFilters(!showFilters)}
+   535→            className="flex items-center gap-2"
+   536→          >
+   537→            <Filter className="w-4 h-4" />
+   538→            Filters
+   539→            <ChevronDown className={cn(
+   540→              'w-4 h-4 transition-transform',
+   541→              showFilters && 'rotate-180'
+   542→            )} />
+   543→          </GlassButton>
+   544→
+   545→          {(selectedCategory || search) && (
+   546→            <GlassButton
+   547→              variant="secondary"
+   548→              size="sm"
+   549→              onClick={clearFilters}
+   550→              className="text-red-500 hover:text-red-600"
+   551→            >
+   552→              Clear
+   553→            </GlassButton>
+   554→          )}
+   555→        </div>
+   556→      </div>
+   557→
+   558→      {/* Filter Chips */}
+   559→      {showFilters && categories.length > 0 && (
+   560→        <div className="flex flex-wrap gap-2 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
+   561→          <span className="text-sm font-medium text-gray-700 mr-2">Categories:</span>
+   562→          <button
+   563→            onClick={() => setSelectedCategory('')}
+   564→            className={cn(
+   565→              'px-3 py-1.5 rounded-full text-sm transition-all',
+   566→              !selectedCategory
+   567→                ? 'bg-primary-500 text-white'
+   568→                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+   569→            )}
+   570→          >
+   571→            All
+   572→          </button>
+   573→          {categories.map((cat) => (
+   574→            <button
+   575→              key={cat}
+   576→              onClick={() => setSelectedCategory(cat)}
+   577→              className={cn(
+   578→                'px-3 py-1.5 rounded-full text-sm transition-all',
+   579→                selectedCategory === cat
+   580→                  ? 'bg-primary-500 text-white'
+   581→                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+   582→              )}
+   583→            >
+   584→              {cat}
+   585→            </button>
+   586→          ))}
+   587→        </div>
+   588→      )}
+   589→
+   590→      {/* Results count */}
+   591→      <div className="flex justify-between items-center text-sm text-gray-500">
+   592→        <span>{channels.length} channels</span>
+   593→        {loading && <span>Loading...</span>}
+   594→      </div>
+   595→
+   596→      {/* Channel Grid */}
+   597→      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+   598→        {channels.map((channel) => (
+   599→          <ChannelCard
+   600→            key={channel.id}
+   601→            channel={channel}
+   602→            onClick={() => handleChannelClick(channel)}
+   603→          />
+   604→        ))}
+   605→      </div>
+   606→
+   607→      {/* Load More */}
+   608→      {hasMore && (
+   609→        <div className="flex justify-center pt-4">
+   610→          <GradientButton
+   611→            size="sm"
+   612→            onClick={loadMore}
+   613→            disabled={loadingMore}
+   614→          >
+   615→            {loadingMore ? (
+   616→              <>
+   617→                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+   618→                Loading...
+   619→              </>
+   620→            ) : (
+   621→              'Load More'
+   622→            )}
+   623→          </GradientButton>
+   624→        </div>
+   625→      )}
+   626→
+   627→      {/* Empty state */}
+   628→      {!loading && channels.length === 0 && (
+   629→        <div className="text-center py-12">
+   630→          <div className="text-4xl mb-4">📺</div>
+   631→          <h3 className="text-lg font-medium text-gray-900">No channels found</h3>
+   632→          <p className="text-gray-500 mt-1">
+   633→            Try adjusting your search or filters
+   634→          </p>
+   635→          <GlassButton
+   636→            variant="secondary"
+   637→            className="mt-4"
+   638→            onClick={clearFilters}
+   639→          >
+   640→            Clear all filters
+   641→          </GlassButton>
+   642→        </div>
+   643→      )}
+   644→    </div>
+   645→  );
+   646→}
+   647→
+   648→// Channel Card Component
+   649→interface ChannelCardProps {
+   650→  channel: Channel;
+   651→  onClick: () => void;
+   652→}
+   653→
+   654→function ChannelCard({ channel, onClick }: ChannelCardProps) {
+   655→  return (
+   656→    <GlassCard
+   657→      variant="solid"
+   658→      hoverable
+   659→      className="cursor-pointer p-4 text-center transition-all duration-300 hover:scale-[1.03] hover:border-primary-200"
+   660→      onClick={onClick}
+   661→    >
+   662→      <div className="relative">
+   663→        {channel.logoUrl ? (
+   664→          <img
+   665→            src={channel.logoUrl}
+   666→            alt={channel.name}
+   667→            className="w-full h-20 object-contain mb-3 bg-white/50 rounded-xl"
+   668→            onError={(e) => {
+   669→              (e.target as HTMLImageElement).src = '';
+   670→              (e.target as HTMLImageElement).style.display = 'none';
+   671→            }}
+   672→          />
+   673→        ) : (
+   674→          <div className="w-full h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center mb-3">
+   675→            <span className="text-3xl">📺</span>
+   676→          </div>
+   677→        )}
+   678→        
+   679→        {channel.isVerified && (
+   680→          <span className="absolute top-1 right-1 text-xs bg-primary-500 text-white px-1.5 py-0.5 rounded-full">
+   681→            ✓
+   682→          </span>
+   683→        )}
+   684→      </div>
+   685→      
+   686→      <p className="font-medium text-gray-800 text-sm truncate" title={channel.name}>
+   687→        {channel.name}
+   688→      </p>
+   689→      
+   690→      {channel.category && (
+   691→        <p className="text-xs text-gray-400 mt-0.5 truncate">
+   692→          {channel.category}
+   693→        </p>
+   694→      )}
+   695→      
+   696→      {channel.country && (
+   697→        <p className="text-xs text-gray-300 mt-0.5">
+   698→          {channel.country}
+   699→        </p>
+   700→      )}
+   701→    </GlassCard>
+   702→  );
+   703→}
+   704→7. PREVIEW POPUP COMPONENT (The Unique Differentiator)
+   705→Create components/popup/PreviewPopup.tsx:
+   706→
+   707→typescript
+   708→// components/popup/PreviewPopup.tsx
+   709→
+   710→'use client';
+   711→
+   712→import { useState, useEffect, useRef } from 'react';
+   713→import { useRouter } from 'next/navigation';
+   714→import { X, Play, Eye, Clock, Volume2, VolumeX, Maximize2 } from 'lucide-react';
+   715→import Hls from 'hls.js';
+   716→import { GlassCard } from '@/components/ui/GlassCard';
+   717→import { GradientButton } from '@/components/ui/GradientButton';
+   718→import { GlassButton } from '@/components/ui/GlassButton';
+   719→import { cn } from '@/lib/utils/cn';
+   720→
+   721→interface Channel {
+   722→  id: string;
+   723→  name: string;
+   724→  logoUrl: string | null;
+   725→  streamUrl: string;
+   726→  category: string | null;
+   727→  country: string | null;
+   728→  language: string | null;
+   729→  isVerified: boolean;
+   730→}
+   731→
+   732→interface PreviewPopupProps {
+   733→  channel: Channel;
+   734→  onWatch: (channelId: string) => void;
+   735→  onDismiss: () => void;
+   736→  autoDismissSeconds?: number;
+   737→  viewerCount?: number;
+   738→  currentShow?: string;
+   739→}
+   740→
+   741→export function PreviewPopup({
+   742→  channel,
+   743→  onWatch,
+   744→  onDismiss,
+   745→  autoDismissSeconds = 10,
+   746→  viewerCount = 0,
+   747→  currentShow,
+   748→}: PreviewPopupProps) {
+   749→  const router = useRouter();
+   750→  const videoRef = useRef<HTMLVideoElement>(null);
+   751→  const hlsRef = useRef<Hls | null>(null);
+   752→  const [progress, setProgress] = useState(100);
+   753→  const [isPlaying, setIsPlaying] = useState(false);
+   754→  const [isMuted, setIsMuted] = useState(true);
+   755→  const [isLoading, setIsLoading] = useState(true);
+   756→  const [error, setError] = useState<string | null>(null);
+   757→  const progressInterval = useRef<NodeJS.Timeout>();
+   758→
+   759→  // Initialize HLS player
+   760→  useEffect(() => {
+   761→    const video = videoRef.current;
+   762→    if (!video || !channel.streamUrl) return;
+   763→
+   764→    setIsLoading(true);
+   765→    setError(null);
+   766→
+   767→    // Check if HLS is supported
+   768→    if (Hls.isSupported()) {
+   769→      const hls = new Hls({
+   770→        enableWorker: true,
+   771→        lowLatencyMode: true,
+   772→        maxBufferLength: 5,
+   773→        maxMaxBufferLength: 10,
+   774→        startLevel: -1, // Auto
+   775→      });
+   776→      
+   777→      hlsRef.current = hls;
+   778→      hls.loadSource(channel.streamUrl);
+   779→      hls.attachMedia(video);
+   780→      
+   781→      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+   782→        setIsLoading(false);
+   783→        video.play().catch(() => {
+   784→          // Autoplay might be blocked - user will need to click
+   785→        });
+   786→      });
+   787→      
+   788→      hls.on(Hls.Events.ERROR, (_, data) => {
+   789→        if (data.fatal) {
+   790→          setError('Failed to load stream');
+   791→          setIsLoading(false);
+   792→        }
+   793→      });
+   794→    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+   795→      // Native HLS (Safari)
+   796→      video.src = channel.streamUrl;
+   797→      video.addEventListener('loadedmetadata', () => {
+   798→        setIsLoading(false);
+   799→        video.play().catch(() => {});
+   800→      });
+   801→    } else {
+   802→      setError('HLS not supported in this browser');
+   803→      setIsLoading(false);
+   804→    }
+   805→
+   806→    return () => {
+   807→      if (hlsRef.current) {
+   808→        hlsRef.current.destroy();
+   809→        hlsRef.current = null;
+   810→      }
+   811→      if (video) {
+   812→        video.pause();
+   813→        video.src = '';
+   814→      }
+   815→    };
+   816→  }, [channel.streamUrl]);
+   817→
+   818→  // Auto-dismiss timer
+   819→  useEffect(() => {
+   820→    let timer = autoDismissSeconds;
+   821→    progressInterval.current = setInterval(() => {
+   822→      timer -= 0.1;
+   823→      setProgress((timer / autoDismissSeconds) * 100);
+   824→      
+   825→      if (timer <= 0) {
+   826→        clearInterval(progressInterval.current);
+   827→        onDismiss();
+   828→      }
+   829→    }, 100);
+   830→
+   831→    return () => {
+   832→      if (progressInterval.current) {
+   833→        clearInterval(progressInterval.current);
+   834→      }
+   835→    };
+   836→  }, [autoDismissSeconds, onDismiss]);
+   837→
+   838→  // Play/Pause
+   839→  const togglePlay = () => {
+   840→    const video = videoRef.current;
+   841→    if (!video) return;
+   842→    
+   843→    if (video.paused) {
+   844→      video.play();
+   845→      setIsPlaying(true);
+   846→    } else {
+   847→      video.pause();
+   848→      setIsPlaying(false);
+   849→    }
+   850→  };
+   851→
+   852→  // Toggle mute
+   853→  const toggleMute = () => {
+   854→    const video = videoRef.current;
+   855→    if (!video) return;
+   856→    
+   857→    video.muted = !video.muted;
+   858→    setIsMuted(video.muted);
+   859→  };
+   860→
+   861→  // Handle video click
+   862→  const handleVideoClick = () => {
+   863→    togglePlay();
+   864→  };
+   865→
+   866→  // Handle watch now
+   867→  const handleWatchNow = () => {
+   868→    if (hlsRef.current) {
+   869→      hlsRef.current.destroy();
+   870→    }
+   871→    onWatch(channel.id);
+   872→  };
+   873→
+   874→  // Keyboard shortcuts
+   875→  useEffect(() => {
+   876→    const handleKeyDown = (e: KeyboardEvent) => {
+   877→      if (e.key === 'Escape') {
+   878→        onDismiss();
+   879→      }
+   880→      if (e.key === 'Enter' || e.key === ' ') {
+   881→        e.preventDefault();
+   882→        togglePlay();
+   883→      }
+   884→      if (e.key === 'm') {
+   885→        toggleMute();
+   886→      }
+   887→    };
+   888→
+   889→    document.addEventListener('keydown', handleKeyDown);
+   890→    return () => document.removeEventListener('keydown', handleKeyDown);
+   891→  }, []);
+   892→
+   893→  return (
+   894→    <>
+   895→      {/* Backdrop */}
+   896→      <div 
+   897→        className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm transition-all duration-500"
+   898→        onClick={onDismiss}
+   899→      >
+   900→        {/* Popup - Glassmorphism */}
+   901→        <div 
+   902→          className={`
+   903→            relative w-full max-w-4xl mx-4 mb-8
+   904→            bg-white/10 backdrop-blur-2xl
+   905→            border border-white/15
+   906→            rounded-3xl
+   907→            shadow-2xl shadow-black/50
+   908→            animate-slideUp
+   909→            overflow-hidden
+   910→          `}
+   911→          onClick={(e) => e.stopPropagation()}
+   912→        >
+   913→          {/* Progress bar (auto-dismiss indicator) */}
+   914→          <div className="absolute top-0 left-0 right-0 h-1 bg-white/10 z-10">
+   915→            <div 
+   916→              className="h-full bg-gradient-to-r from-primary-500 to-secondary-500 transition-all duration-100"
+   917→              style={{ width: `${Math.max(0, progress)}%` }}
+   918→            />
+   919→          </div>
+   920→
+   921→          <div className="p-6 flex flex-col md:flex-row gap-6">
+   922→            {/* Video Preview - Left */}
+   923→            <div className="relative flex-shrink-0 w-full md:w-72 aspect-video rounded-2xl overflow-hidden bg-black/80">
+   924→              {isLoading && (
+   925→                <div className="absolute inset-0 flex items-center justify-center">
+   926→                  <div className="w-10 h-10 border-4 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
+   927→                </div>
+   928→              )}
+   929→              
+   930→              {error && (
+   931→                <div className="absolute inset-0 flex items-center justify-center text-white/60 text-sm p-4 text-center">
+   932→                  {error}
+   933→                </div>
+   934→              )}
+   935→              
+   936→              <video
+   937→                ref={videoRef}
+   938→                className="w-full h-full object-cover"
+   939→                muted={isMuted}
+   940→                playsInline
+   941→                onClick={handleVideoClick}
+   942→                onPlay={() => setIsPlaying(true)}
+   943→                onPause={() => setIsPlaying(false)}
+   944→              />
+   945→              
+   946→              {/* Video overlay controls */}
+   947→              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+   948→                {!isPlaying && !isLoading && !error && (
+   949→                  <button
+   950→                    onClick={handleVideoClick}
+   951→                    className="pointer-events-auto w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm border border-white/20 flex items-center justify-center hover:bg-white/30 transition"
+   952→                  >
+   953→                    <Play className="w-6 h-6 text-white fill-white ml-1" />
+   954→                  </button>
+   955→                )}
+   956→              </div>
+   957→
+   958→              {/* Live badge */}
+   959→              <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-red-500/90 text-white text-xs font-semibold flex items-center gap-1.5 backdrop-blur-sm">
+   960→                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+   961→                LIVE
+   962→              </div>
+   963→
+   964→              {/* Mute toggle */}
+   965→              <button
+   966→                onClick={toggleMute}
+   967→                className="absolute bottom-3 left-3 pointer-events-auto w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 flex items-center justify-center hover:bg-black/70 transition text-white/70 hover:text-white"
+   968→              >
+   969→                {isMuted ? (
+   970→                  <VolumeX className="w-4 h-4" />
+   971→                ) : (
+   972→                  <Volume2 className="w-4 h-4" />
+   973→                )}
+   974→              </button>
+   975→            </div>
+   976→
+   977→            {/* Content - Right */}
+   978→            <div className="flex-1 flex flex-col justify-center min-w-0">
+   979→              {/* Channel info */}
+   980→              <div className="flex items-center gap-3 mb-2">
+   981→                {channel.logoUrl ? (
+   982→                  <img 
+   983→                    src={channel.logoUrl} 
+   984→                    alt={channel.name}
+   985→                    className="w-10 h-10 rounded-xl object-contain bg-white/5 p-1"
+   986→                    onError={(e) => {
+   987→                      (e.target as HTMLImageElement).style.display = 'none';
+   988→                    }}
+   989→                  />
+   990→                ) : (
+   991→                  <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center">
+   992→                    <span className="text-lg">📺</span>
+   993→                  </div>
+   994→                )}
+   995→                <div>
+   996→                  <h3 className="text-white font-semibold text-lg truncate">
+   997→                    {channel.name}
+   998→                  </h3>
+   999→                  {channel.category && (
+  1000→                    <p className="text-white/50 text-sm truncate">
+  1001→                      {channel.category}
+  1002→                    </p>
+  1003→                  )}
+  1004→                </div>
+  1005→              </div>
+  1006→
+  1007→              {/* Current Show */}
+  1008→              {currentShow && (
+  1009→                <p className="text-white/80 text-sm mb-3 line-clamp-2">
+  1010→                  Now Playing: <span className="text-white font-medium">{currentShow}</span>
+  1011→                </p>
+  1012→              )}
+  1013→
+  1014→              {/* Viewer count */}
+  1015→              {viewerCount > 0 && (
+  1016→                <div className="flex items-center gap-1.5 text-white/40 text-xs mb-4">
+  1017→                  <Eye className="w-3.5 h-3.5" />
+  1018→                  <span>{viewerCount.toLocaleString()} watching</span>
+  1019→                </div>
+  1020→              )}
+  1021→
+  1022→              {/* Auto-dismiss timer text */}
+  1023→              <div className="flex items-center gap-2 text-white/30 text-xs mb-4">
+  1024→                <Clock className="w-3.5 h-3.5" />
+  1025→                <span>Auto-closes in {Math.ceil((progress / 100) * autoDismissSeconds)}s</span>
+  1026→              </div>
+  1027→
+  1028→              {/* Action Buttons */}
+  1029→              <div className="flex flex-wrap items-center gap-3">
+  1030→                <GradientButton
+  1031→                  size="md"
+  1032→                  onClick={handleWatchNow}
+  1033→                  className="flex items-center gap-2"
+  1034→                >
+  1035→                  <Play className="w-4 h-4 fill-white" />
+  1036→                  Watch Now
+  1037→                </GradientButton>
+  1038→
+  1039→                <GlassButton
+  1040→                  variant="secondary"
+  1041→                  size="md"
+  1042→                  onClick={onDismiss}
+  1043→                  className="!bg-white/10 !text-white/70 hover:!bg-white/20 hover:!text-white !border-white/10"
+  1044→                >
+  1045→                  <X className="w-4 h-4 mr-1" />
+  1046→                  Maybe Later
+  1047→                </GlassButton>
+  1048→              </div>
+  1049→            </div>
+  1050→
+  1051→            {/* Close button (top right) */}
+  1052→            <button
+  1053→              onClick={onDismiss}
+  1054→              className="
+  1055→                absolute top-3 right-3 
+  1056→                w-8 h-8 
+  1057→                rounded-full 
+  1058→                bg-white/10 hover:bg-white/20
+  1059→                text-white/50 hover:text-white
+  1060→                transition-all duration-300
+  1061→                flex items-center justify-center
+  1062→              "
+  1063→            >
+  1064→              <X className="w-4 h-4" />
+  1065→            </button>
+  1066→          </div>
+  1067→        </div>
+  1068→      </div>
+  1069→
+  1070→      {/* Animation styles */}
+  1071→      <style>{`
+  1072→        @keyframes slideUp {
+  1073→          from {
+  1074→            opacity: 0;
+  1075→            transform: translateY(40px) scale(0.95);
+  1076→          }
+  1077→          to {
+  1078→            opacity: 1;
+  1079→            transform: translateY(0) scale(1);
+  1080→          }
+  1081→        }
+  1082→        .animate-slideUp {
+  1083→          animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  1084→        }
+  1085→        .line-clamp-2 {
+  1086→          display: -webkit-box;
+  1087→          -webkit-line-clamp: 2;
+  1088→          -webkit-box-orient: vertical;
+  1089→          overflow: hidden;
+  1090→        }
+  1091→      `}</style>
+  1092→    </>
+  1093→  );
+  1094→}
+  1095→8. HOME PAGE WITH PREVIEW POPUP
+  1096→Update app/(main)/home/page.tsx:
+  1097→
+  1098→typescript
+  1099→// app/(main)/home/page.tsx
+  1100→
+  1101→'use client';
+  1102→
+  1103→import { useState, useEffect } from 'react';
+  1104→import { useRouter } from 'next/navigation';
+  1105→import { auth } from '@/lib/auth/auth';
+  1106→import { ChannelGrid } from '@/components/channels/ChannelGrid';
+  1107→import { PreviewPopup } from '@/components/popup/PreviewPopup';
+  1108→import { GlassCard } from '@/components/ui/GlassCard';
+  1109→import { GradientButton } from '@/components/ui/GradientButton';
+  1110→
+  1111→interface Channel {
+  1112→  id: string;
+  1113→  name: string;
+  1114→  logoUrl: string | null;
+  1115→  streamUrl: string;
+  1116→  category: string | null;
+  1117→  country: string | null;
+  1118→  language: string | null;
+  1119→  isVerified: boolean;
+  1120→}
+  1121→
+  1122→export default function HomePage() {
+  1123→  const router = useRouter();
+  1124→  const [channels, setChannels] = useState<Channel[]>([]);
+  1125→  const [loading, setLoading] = useState(true);
+  1126→  const [showPreview, setShowPreview] = useState(false);
+  1127→  const [featuredChannel, setFeaturedChannel] = useState<Channel | null>(null);
+  1128→  const [preferences, setPreferences] = useState<any>(null);
+  1129→
+  1130→  // Fetch channels and check onboarding status
+  1131→  useEffect(() => {
+  1132→    const loadData = async () => {
+  1133→      setLoading(true);
+  1134→      
+  1135→      try {
+  1136→        // Fetch channels
+  1137→        const response = await fetch('/api/channels?limit=20');
+  1138→        const data = await response.json();
+  1139→        setChannels(data.data || []);
+  1140→        
+  1141→        // Fetch user preferences
+  1142→        const prefsResponse = await fetch('/api/preferences');
+  1143→        const prefsData = await prefsResponse.json();
+  1144→        setPreferences(prefsData.data);
+  1145→        
+  1146→        // Select a featured channel for the preview popup
+  1147→        if (data.data && data.data.length > 0) {
+  1148→          // Pick a random channel, or one that matches user preferences
+  1149→          let selected = data.data[Math.floor(Math.random() * data.data.length)];
+  1150→          
+  1151→          // If user has preferences, try to find a matching channel
+  1152→          if (prefsData.data?.preferredGenres?.length > 0) {
+  1153→            const matching = data.data.find((ch: Channel) => 
+  1154→              ch.category && prefsData.data.preferredGenres.includes(ch.category.toLowerCase())
+  1155→            );
+  1156→            if (matching) {
+  1157→              selected = matching;
+  1158→            }
+  1159→          }
+  1160→          
+  1161→          setFeaturedChannel(selected);
+  1162→          
+  1163→          // Show preview popup after a delay
+  1164→          setTimeout(() => {
+  1165→            setShowPreview(true);
+  1166→          }, 2000);
+  1167→        }
+  1168→      } catch (error) {
+  1169→        console.error('Failed to load home data:', error);
+  1170→      } finally {
+  1171→        setLoading(false);
+  1172→      }
+  1173→    };
+  1174→    
+  1175→    loadData();
+  1176→  }, []);
+  1177→
+  1178→  // Handle watch from preview
+  1179→  const handleWatch = (channelId: string) => {
+  1180→    setShowPreview(false);
+  1181→    router.push(`/player/${channelId}`);
+  1182→  };
+  1183→
+  1184→  // Handle dismiss preview
+  1185→  const handleDismiss = () => {
+  1186→    setShowPreview(false);
+  1187→  };
+  1188→
+  1189→  // Handle sync channels (admin action)
+  1190→  const handleSyncChannels = async () => {
+  1191→    try {
+  1192→      const response = await fetch('/api/channels/sync', {
+  1193→        method: 'POST',
+  1194→        headers: { 'Content-Type': 'application/json' },
+  1195→        body: JSON.stringify({}),
+  1196→      });
+  1197→      const data = await response.json();
+  1198→      console.log('Sync result:', data);
+  1199→      // Refresh channels
+  1200→      window.location.reload();
+  1201→    } catch (error) {
+  1202→      console.error('Sync failed:', error);
+  1203→    }
+  1204→  };
+  1205→
+  1206→  if (loading) {
+  1207→    return (
+  1208→      <div className="flex items-center justify-center min-h-[60vh]">
+  1209→        <div className="text-center">
+  1210→          <div className="w-12 h-12 border-4 border-primary-500/30 border-t-primary-500 rounded-full animate-spin mx-auto mb-4" />
+  1211→          <p className="text-gray-500">Loading your channels...</p>
+  1212→        </div>
+  1213→      </div>
+  1214→    );
+  1215→  }
+  1216→
+  1217→  return (
+  1218→    <div className="space-y-8">
+  1219→      {/* Welcome Section */}
+  1220→      <div className="bg-gradient-to-br from-warm-beige to-gray-50 rounded-3xl p-8">
+  1221→        <h1 className="text-3xl font-bold text-gray-900">
+  1222→          Good {new Date().getHours() < 12 ? 'Morning' : 'Evening'}! 👋
+  1223→        </h1>
+  1224→        <p className="text-gray-600 mt-1">
+  1225→          {preferences?.onboardingCompleted 
+  1226→            ? 'Here are your personalized channels'
+  1227→            : 'Let\'s find something great for you to watch'}
+  1228→        </p>
+  1229→        
+  1230→        {/* Admin: Sync button (hidden in production) */}
+  1231→        {process.env.NODE_ENV === 'development' && (
+  1232→          <button
+  1233→            onClick={handleSyncChannels}
+  1234→            className="mt-4 text-xs text-gray-400 hover:text-gray-600 transition"
+  1235→          >
+  1236→            Sync Channels (Dev)
+  1237→          </button>
+  1238→        )}
+  1239→      </div>
+  1240→
+  1241→      {/* Continue Watching - Placeholder */}
+  1242→      <section>
+  1243→        <h2 className="text-xl font-semibold text-gray-900 mb-4">Continue Watching</h2>
+  1244→        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+  1245→          {channels.slice(0, 4).map((channel) => (
+  1246→            <GlassCard
+  1247→              key={`continue-${channel.id}`}
+  1248→              variant="solid"
+  1249→              hoverable
+  1250→              className="p-4 cursor-pointer"
+  1251→              onClick={() => router.push(`/player/${channel.id}`)}
+  1252→            >
+  1253→              <div className="aspect-video bg-gray-100 rounded-xl mb-3 flex items-center justify-center">
+  1254→                {channel.logoUrl ? (
+  1255→                  <img
+  1256→                    src={channel.logoUrl}
+  1257→                    alt={channel.name}
+  1258→                    className="h-12 object-contain"
+  1259→                  />
+  1260→                ) : (
+  1261→                  <span className="text-2xl">📺</span>
+  1262→                )}
+  1263→              </div>
+  1264→              <p className="font-medium text-gray-700 text-sm truncate">{channel.name}</p>
+  1265→            </GlassCard>
+  1266→          ))}
+  1267→        </div>
+  1268→      </section>
+  1269→
+  1270→      {/* All Channels */}
+  1271→      <section>
+  1272→        <div className="flex justify-between items-center mb-4">
+  1273→          <h2 className="text-xl font-semibold text-gray-900">All Channels</h2>
+  1274→          <span className="text-sm text-gray-500">{channels.length} channels</span>
+  1275→        </div>
+  1276→        <ChannelGrid 
+  1277→          initialChannels={channels}
+  1278→          onChannelSelect={(channel) => router.push(`/player/${channel.id}`)}
+  1279→          showPreview={false}
+  1280→        />
+  1281→      </section>
+  1282→
+  1283→      {/* Preview Popup */}
+  1284→      {showPreview && featuredChannel && (
+  1285→        <PreviewPopup
+  1286→          channel={featuredChannel}
+  1287→          onWatch={handleWatch}
+  1288→          onDismiss={handleDismiss}
+  1289→          autoDismissSeconds={10}
+  1290→          viewerCount={Math.floor(Math.random() * 1000) + 100}
+  1291→        />
+  1292→      )}
+  1293→    </div>
+  1294→  );
+  1295→}
+  1296→9. PREFERENCES API
+  1297→Create app/api/preferences/route.ts:
+  1298→
+  1299→typescript
+  1300→// app/api/preferences/route.ts
+  1301→
+  1302→import { NextResponse } from 'next/server';
+  1303→import { auth } from '@/lib/auth/auth';
+  1304→import { db } from '@/lib/db';
+  1305→import { userPreferences } from '@/lib/db/schema';
+  1306→import { eq } from 'drizzle-orm';
+  1307→
+  1308→export async function GET() {
+  1309→  try {
+  1310→    const session = await auth();
+  1311→    if (!session) {
+  1312→      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  1313→    }
+  1314→
+  1315→    const prefs = await db
+  1316→      .select()
+  1317→      .from(userPreferences)
+  1318→      .where(eq(userPreferences.userId, session.user.id))
+  1319→      .limit(1);
+  1320→
+  1321→    return NextResponse.json({
+  1322→      data: prefs[0] || null,
+  1323→    });
+  1324→  } catch (error) {
+  1325→    console.error('Preferences API error:', error);
+  1326→    return NextResponse.json(
+  1327→      { error: 'Failed to fetch preferences' },
+  1328→      { status: 500 }
+  1329→    );
+  1330→  }
+  1331→}
+  1332→10. SQL MIGRATION
+  1333→Create lib/db/migrations/0002_add_channels.sql:
+  1334→
+  1335→sql
+  1336→-- Add channels table if not exists
+  1337→CREATE TABLE IF NOT EXISTS channels (
+  1338→  id TEXT PRIMARY KEY,
+  1339→  name TEXT NOT NULL,
+  1340→  logo_url TEXT,
+  1341→  stream_url TEXT NOT NULL,
+  1342→  category TEXT,
+  1343→  country TEXT,
+  1344→  language TEXT,
+  1345→  is_verified BOOLEAN DEFAULT false,
+  1346→  last_updated TIMESTAMP DEFAULT NOW()
+  1347→);
+  1348→
+  1349→-- Add indexes for performance
+  1350→CREATE INDEX IF NOT EXISTS idx_channels_name ON channels(name);
+  1351→CREATE INDEX IF NOT EXISTS idx_channels_category ON channels(category);
+  1352→CREATE INDEX IF NOT EXISTS idx_channels_country ON channels(country);
+  1353→
+  1354→-- Add updated_at trigger
+  1355→CREATE OR REPLACE FUNCTION update_updated_at_column()
+  1356→RETURNS TRIGGER AS $$
+  1357→BEGIN
+  1358→  NEW.last_updated = NOW();
+  1359→  RETURN NEW;
+  1360→END;
+  1361→$$ language 'plpgsql';
+  1362→
+  1363→CREATE TRIGGER update_channels_updated_at 
+  1364→  BEFORE UPDATE ON channels 
+  1365→  FOR EACH ROW 
+  1366→  EXECUTE FUNCTION update_updated_at_column();
+  1367→Run the migration:
+  1368→
+  1369→bash
+  1370→npx drizzle-kit push:pg
+  1371→11. VERIFICATION CHECKLIST
+  1372→After the AI generates the code:
+  1373→
+  1374→□ Run npm install for new dependencies
+  1375→□ Run npx drizzle-kit push:pg to create the channels table
+  1376→□ Test the sync endpoint: POST /api/channels/sync
+  1377→□ Verify channels appear in the database
+  1378→□ Test the channels API: GET /api/channels
+  1379→□ Verify the channel grid displays on the home page
+  1380→□ Test search and category filtering
+  1381→□ Test the Preview Popup: Log in and wait 2 seconds
+  1382→□ Verify the popup shows a mini-player with HLS stream
+  1383→□ Test "Watch Now" navigates to the player
+  1384→□ Test "Maybe Later" dismisses the popup
+  1385→□ Verify auto-dismiss timer works (10 seconds)
+  1386→□ Test keyboard shortcuts: Escape, Space, M
+  1387→PROMPT END

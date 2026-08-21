@@ -70,6 +70,7 @@ function SectionHeader({
 export function HomeView() {
   const user = useAuthStore((s) => s.user)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
+  const openPlayer = useAppStore((s) => s.openPlayer)
   const { channels, loading } = useChannels(20)
   const { favoriteIds, isFavorite, toggleFavorite } = useFavorites()
 
@@ -168,7 +169,7 @@ export function HomeView() {
                 channel={channel}
                 favorited={isFavorite(channel.id)}
                 onToggleFavorite={() => toggleFavorite(channel.id)}
-                onClick={() => setActiveTab('guide')}
+                onClick={() => openPlayer(channel)}
               />
             ))}
           </div>
@@ -207,7 +208,7 @@ export function HomeView() {
                 channel={channel}
                 favorited={isFavorite(channel.id)}
                 onToggleFavorite={() => toggleFavorite(channel.id)}
-                onClick={() => setActiveTab('guide')}
+                onClick={() => openPlayer(channel)}
               />
             ))}
           </div>
@@ -242,7 +243,7 @@ export function HomeView() {
                 channel={channel}
                 favorited={isFavorite(channel.id)}
                 onToggleFavorite={() => toggleFavorite(channel.id)}
-                onClick={() => setActiveTab('guide')}
+                onClick={() => openPlayer(channel)}
                 className="min-w-[180px] max-w-[220px]"
               />
             ))}

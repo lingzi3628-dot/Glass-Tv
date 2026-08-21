@@ -3,6 +3,15 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireUser, unauthorized } from '@/lib/api-auth'
 
+/**
+ * GET /api/channels/[id]
+ *
+ * Returns a single channel by id. Unlike the list endpoint, this INCLUDES
+ * `streamUrl` because the user has explicitly picked a channel to watch —
+ * the player / preview popup needs the URL to actually load the stream.
+ *
+ * 404 if the channel id doesn't exist.
+ */
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -18,6 +27,7 @@ export async function GET(
         id: true,
         name: true,
         logoUrl: true,
+        streamUrl: true,
         category: true,
         country: true,
         language: true,
@@ -26,13 +36,18 @@ export async function GET(
     })
 
     if (!channel) {
-      return NextResponse.json({ error: 'channel not found' }, { status: 404 })
+      return NextResponse.json(
+        { error: 'channel not found' },
+        { status: 404 },
+      )
     }
 
-    // streamUrl is intentionally excluded.
     return NextResponse.json({ channel }, { status: 200 })
   } catch (err) {
     console.error('[api/channels/[id]] error', err)
-    return NextResponse.json({ error: 'internal server error' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'internal server error' },
+      { status: 500 },
+    )
   }
 }
