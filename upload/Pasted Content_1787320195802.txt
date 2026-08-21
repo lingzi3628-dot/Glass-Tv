@@ -1,0 +1,1712 @@
+I have completed Phase 1 (Authentication & Onboarding) and Phase 2 (IPTV Integration, Channel Grid & Preview Popup) of my GlassTV project.
+
+Now I need Phase 3: Full Player & Smart TV Controls.
+
+PHASE 3 GOALS
+Full Video Player Page – Dedicated player page with HLS.js streaming
+
+Player Controls – Play/Pause, Volume, Fullscreen, Picture-in-Picture
+
+Quality Selector – Manual quality override (Auto, 1080p, 720p, 480p)
+
+Smart TV Remote Support – D-pad navigation with focus rings
+
+Keyboard Shortcuts – Space, Arrow keys, F (fullscreen), M (mute)
+
+Player State Management – Zustand store for player state
+
+Continue Watching – Track watch progress and resume
+
+1. PLAYER STATE STORE (ZUSTAND)
+Create lib/store/playerStore.ts:
+
+typescript
+// lib/store/playerStore.ts
+
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+export interface PlayerState {
+  // Playback state
+  isPlaying: boolean;
+  isMuted: boolean;
+  volume: number;
+  currentTime: number;
+  duration: number;
+  buffering: boolean;
+  playbackRate: number;
+  
+  // Quality
+  currentLevel: number; // -1 = auto
+  availableLevels: Array<{
+    index: number;
+    height: number;
+    width: number;
+    bitrate: number;
+    label: string;
+  }>;
+  
+  // UI state
+  controlsVisible: boolean;
+  isFullscreen: boolean;
+  isPiP: boolean;
+  showSettings: boolean;
+  showQualitySelector: boolean;
+  
+  // Actions
+  setIsPlaying: (isPlaying: boolean) => void;
+  setIsMuted: (isMuted: boolean) => void;
+  setVolume: (volume: number) => void;
+  setCurrentTime: (time: number) => void;
+  setDuration: (duration: number) => void;
+  setBuffering: (buffering: boolean) => void;
+  setPlaybackRate: (rate: number) => void;
+  setCurrentLevel: (level: number) => void;
+  setAvailableLevels: (levels: PlayerState['availableLevels']) => void;
+  setControlsVisible: (visible: boolean) => void;
+  setIsFullscreen: (isFullscreen: boolean) => void;
+  setIsPiP: (isPiP: boolean) => void;
+  setShowSettings: (show: boolean) => void;
+  setShowQualitySelector: (show: boolean) => void;
+  togglePlay: () => void;
+  toggleMute: () => void;
+  toggleFullscreen: () => void;
+  togglePiP: () => void;
+  toggleSettings: () => void;
+  seekTo: (time: number) => void;
+  reset: () => void;
+}
+
+export const usePlayerStore = create<PlayerState>()(
+  persist(
+    (set, get) => ({
+      // Initial state
+      isPlaying: false,
+      isMuted: false,
+      volume: 0.8,
+      currentTime: 0,
+      duration: 0,
+      buffering: false,
+      playbackRate: 1,
+      currentLevel: -1,
+      availableLevels: [],
+      controlsVisible: true,
+      isFullscreen: false,
+      isPiP: false,
+      showSettings: false,
+      showQualitySelector: false,
+
+      // Actions
+      setIsPlaying: (isPlaying) => set({ isPlaying }),
+      setIsMuted: (isMuted) => set({ isMuted }),
+      setVolume: (volume) => set({ volume: Math.max(0, Math.min(1, volume)) }),
+      setCurrentTime: (currentTime) => set({ currentTime }),
+      setDuration: (duration) => set({ duration }),
+      setBuffering: (buffering) => set({ buffering }),
+      setPlaybackRate: (playbackRate) => set({ playbackRate }),
+      setCurrentLevel: (currentLevel) => set({ currentLevel }),
+      setAvailableLevels: (availableLevels) => set({ availableLevels }),
+      setControlsVisible: (controlsVisible) => set({ controlsVisible }),
+      setIsFullscreen: (isFullscreen) => set({ isFullscreen }),
+      setIsPiP: (isPiP) => set({ isPiP }),
+      setShowSettings: (showSettings) => set({ showSettings }),
+      setShowQualitySelector: (showQualitySelector) => set({ showQualitySelector }),
+      
+      togglePlay: () => {
+        const { isPlaying } = get();
+        set({ isPlaying: !isPlaying });
+      },
+      
+      toggleMute: () => {
+        const { isMuted } = get();
+        set({ isMuted: !isMuted });
+      },
+      
+      toggleFullscreen: () => {
+        const { isFullscreen } = get();
+        set({ isFullscreen: !isFullscreen });
+      },
+      
+      togglePiP: () => {
+        const { isPiP } = get();
+        set({ isPiP: !isPiP });
+      },
+      
+      toggleSettings: () => {
+        const { showSettings } = get();
+        set({ showSettings: !showSettings });
+      },
+      
+      seekTo: (time) => set({ currentTime: time }),
+      
+      reset: () => {
+        set({
+          isPlaying: false,
+          currentTime: 0,
+          duration: 0,
+          buffering: false,
+          currentLevel: -1,
+          availableLevels: [],
+          controlsVisible: true,
+          showSettings: false,
+          showQualitySelector: false,
+        });
+      },
+    }),
+    {
+      name: 'player-storage',
+      partialize: (state) => ({
+        volume: state.volume,
+        playbackRate: state.playbackRate,
+      }),
+    }
+  )
+);
+2. WATCH HISTORY API
+Create app/api/history/route.ts:
+
+typescript
+// app/api/history/route.ts
+
+import { NextResponse } from 'next/server';
+import { auth } from '@/lib/auth/auth';
+import { db } from '@/lib/db';
+import { watchHistory, channels, users } from '@/lib/db/schema';
+import { eq, desc, and, sql } from 'drizzle-orm';
+
+export async function GET() {
+  try {
+    const session = await auth();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const history = await db
+      .select({
+        id: watchHistory.id,
+        channelId: watchHistory.channelId,
+        watchedAt: watchHistory.watchedAt,
+        durationSeconds: watchHistory.durationSeconds,
+        channel: {
+          id: channels.id,
+          name: channels.name,
+          logoUrl: channels.logoUrl,
+          category: channels.category,
+        },
+      })
+      .from(watchHistory)
+      .leftJoin(channels, eq(watchHistory.channelId, channels.id))
+      .where(eq(watchHistory.userId, session.user.id))
+      .orderBy(desc(watchHistory.watchedAt))
+      .limit(50);
+
+    return NextResponse.json({ data: history });
+  } catch (error) {
+    console.error('History API error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch history' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const session = await auth();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { channelId, durationSeconds } = await req.json();
+
+    if (!channelId) {
+      return NextResponse.json(
+        { error: 'Channel ID required' },
+        { status: 400 }
+      );
+    }
+
+    // Insert or update watch history
+    await db.insert(watchHistory).values({
+      userId: session.user.id,
+      channelId,
+      durationSeconds: durationSeconds || 0,
+      watchedAt: new Date(),
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('History API error:', error);
+    return NextResponse.json(
+      { error: 'Failed to save history' },
+      { status: 500 }
+    );
+  }
+}
+3. SMART TV REMOTE CONTROL HOOK
+Create hooks/useRemoteControl.ts:
+
+typescript
+// hooks/useRemoteControl.ts
+
+'use client';
+
+import { useEffect, useRef, RefObject } from 'react';
+
+export interface RemoteControlOptions {
+  enabled?: boolean;
+  onEnter?: () => void;
+  onBack?: () => void;
+  onArrowUp?: () => void;
+  onArrowDown?: () => void;
+  onArrowLeft?: () => void;
+  onArrowRight?: () => void;
+  onPlay?: () => void;
+  onPause?: () => void;
+  onVolumeUp?: () => void;
+  onVolumeDown?: () => void;
+  onMute?: () => void;
+  onFullscreen?: () => void;
+  onNumber?: (num: number) => void;
+  focusSelector?: string;
+  focusContainer?: RefObject<HTMLElement>;
+}
+
+export function useRemoteControl({
+  enabled = true,
+  onEnter,
+  onBack,
+  onArrowUp,
+  onArrowDown,
+  onArrowLeft,
+  onArrowRight,
+  onPlay,
+  onPause,
+  onVolumeUp,
+  onVolumeDown,
+  onMute,
+  onFullscreen,
+  onNumber,
+  focusSelector = '[tabindex="0"], button, a, input, select, textarea',
+  focusContainer,
+}: RemoteControlOptions = {}) {
+  const focusableElementsRef = useRef<HTMLElement[]>([]);
+  const currentFocusIndex = useRef<number>(0);
+
+  // Update focusable elements
+  const updateFocusableElements = () => {
+    const container = focusContainer?.current || document;
+    const elements = container.querySelectorAll<HTMLElement>(focusSelector);
+    focusableElementsRef.current = Array.from(elements).filter(
+      (el) => !el.disabled && el.getAttribute('aria-hidden') !== 'true'
+    );
+  };
+
+  // Focus next/previous element
+  const focusNext = () => {
+    if (focusableElementsRef.current.length === 0) return;
+    currentFocusIndex.current = (currentFocusIndex.current + 1) % focusableElementsRef.current.length;
+    focusableElementsRef.current[currentFocusIndex.current]?.focus();
+  };
+
+  const focusPrevious = () => {
+    if (focusableElementsRef.current.length === 0) return;
+    currentFocusIndex.current = (currentFocusIndex.current - 1 + focusableElementsRef.current.length) % focusableElementsRef.current.length;
+    focusableElementsRef.current[currentFocusIndex.current]?.focus();
+  };
+
+  const focusFirst = () => {
+    if (focusableElementsRef.current.length === 0) return;
+    currentFocusIndex.current = 0;
+    focusableElementsRef.current[0]?.focus();
+  };
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    // Update focusable elements on mount and when DOM changes
+    updateFocusableElements();
+    
+    const observer = new MutationObserver(() => {
+      updateFocusableElements();
+    });
+    
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    // Focus first element
+    setTimeout(focusFirst, 100);
+
+    // Handle keydown events (TV remote / keyboard)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevent default for media keys
+      const mediaKeys = [' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Backspace', 'Escape', 'f', 'm'];
+      if (mediaKeys.includes(e.key) || e.key.startsWith('Media')) {
+        e.preventDefault();
+      }
+
+      // Number keys (0-9)
+      if (e.key >= '0' && e.key <= '9') {
+        onNumber?.(parseInt(e.key));
+        return;
+      }
+
+      // Navigation
+      switch (e.key) {
+        case 'ArrowUp':
+          onArrowUp?.();
+          focusPrevious();
+          break;
+          
+        case 'ArrowDown':
+          onArrowDown?.();
+          focusNext();
+          break;
+          
+        case 'ArrowLeft':
+          onArrowLeft?.();
+          break;
+          
+        case 'ArrowRight':
+          onArrowRight?.();
+          break;
+          
+        case 'Enter':
+          onEnter?.();
+          // Simulate click on focused element
+          (document.activeElement as HTMLElement)?.click?.();
+          break;
+          
+        case 'Escape':
+        case 'Backspace':
+          onBack?.();
+          break;
+          
+        case ' ':
+          if (onPause && document.activeElement?.tagName !== 'INPUT') {
+            onPause?.();
+          }
+          break;
+          
+        case 'MediaPlay':
+          onPlay?.();
+          break;
+          
+        case 'MediaPause':
+          onPause?.();
+          break;
+          
+        case 'MediaPlayPause':
+          onPlay?.();
+          break;
+          
+        case 'MediaStop':
+          onPause?.();
+          break;
+          
+        case 'MediaTrackPrevious':
+          onVolumeDown?.();
+          break;
+          
+        case 'MediaTrackNext':
+          onVolumeUp?.();
+          break;
+          
+        case 'f':
+          onFullscreen?.();
+          break;
+          
+        case 'm':
+          onMute?.();
+          break;
+          
+        case 'VolumeUp':
+          onVolumeUp?.();
+          break;
+          
+        case 'VolumeDown':
+          onVolumeDown?.();
+          break;
+          
+        case 'VolumeMute':
+          onMute?.();
+          break;
+      }
+    };
+
+    // Handle focus events
+    const handleFocus = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      const index = focusableElementsRef.current.indexOf(target);
+      if (index !== -1) {
+        currentFocusIndex.current = index;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('focusin', handleFocus);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('focusin', handleFocus);
+      observer.disconnect();
+    };
+  }, [enabled, focusSelector, focusContainer]);
+
+  return {
+    focusableElements: focusableElementsRef.current,
+    currentFocusIndex: currentFocusIndex.current,
+    focusFirst,
+    focusNext,
+    focusPrevious,
+    updateFocusableElements,
+  };
+}
+4. PLAYER COMPONENT
+Create components/player/Player.tsx:
+
+typescript
+// components/player/Player.tsx
+
+'use client';
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import Hls from 'hls.js';
+import { usePlayerStore } from '@/lib/store/playerStore';
+import { useRemoteControl } from '@/hooks/useRemoteControl';
+import { PlayerControls } from './PlayerControls';
+import { PlayerSettings } from './PlayerSettings';
+import { cn } from '@/lib/utils/cn';
+
+interface PlayerProps {
+  channelId: string;
+  streamUrl: string;
+  channelName: string;
+  channelLogo?: string | null;
+  onBack?: () => void;
+}
+
+export function Player({ 
+  channelId, 
+  streamUrl, 
+  channelName, 
+  channelLogo,
+  onBack,
+}: PlayerProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const controlsTimeoutRef = useRef<NodeJS.Timeout>();
+  
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  
+  const {
+    isPlaying,
+    isMuted,
+    volume,
+    currentTime,
+    duration,
+    buffering,
+    playbackRate,
+    currentLevel,
+    availableLevels,
+    controlsVisible,
+    isFullscreen,
+    isPiP,
+    showSettings,
+    showQualitySelector,
+    setIsPlaying,
+    setIsMuted,
+    setVolume,
+    setCurrentTime,
+    setDuration,
+    setBuffering,
+    setPlaybackRate,
+    setCurrentLevel,
+    setAvailableLevels,
+    setControlsVisible,
+    setIsFullscreen,
+    setIsPiP,
+    setShowSettings,
+    setShowQualitySelector,
+    togglePlay,
+    toggleMute,
+    toggleFullscreen,
+    togglePiP,
+    toggleSettings,
+    seekTo,
+  } = usePlayerStore();
+
+  // Initialize HLS player
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !streamUrl) return;
+
+    setLoading(true);
+    setError(null);
+
+    // Clean up existing HLS instance
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    // Check HLS support
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        startLevel: currentLevel,
+        abrEwmaDefaultEstimate: 2000000,
+        abrEwmaFastLive: 3.0,
+        abrEwmaSlowLive: 9.0,
+      });
+
+      hlsRef.current = hls;
+      hls.loadSource(streamUrl);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+        setLoading(false);
+        
+        // Get available quality levels
+        const levels = hls.levels.map((level, index) => ({
+          index,
+          height: level.height,
+          width: level.width,
+          bitrate: level.bitrate,
+          label: level.height > 0 ? `${level.height}p` : `${Math.round(level.bitrate / 1000)}k`,
+        }));
+        
+        setAvailableLevels(levels);
+        
+        // Try to auto-play
+        video.play().catch(() => {
+          // Autoplay blocked - user will need to click
+        });
+      });
+
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
+        setCurrentLevel(data.level);
+      });
+
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) {
+          setError('Failed to play stream. Please try again.');
+          setLoading(false);
+        }
+      });
+
+      hls.on(Hls.Events.FRAG_LOADING, () => {
+        setBuffering(true);
+      });
+
+      hls.on(Hls.Events.FRAG_LOADED, () => {
+        setBuffering(false);
+      });
+
+      // Set initial volume
+      video.volume = volume;
+      video.muted = isMuted;
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Native HLS (Safari)
+      video.src = streamUrl;
+      video.addEventListener('loadedmetadata', () => {
+        setLoading(false);
+        video.play().catch(() => {});
+      });
+    } else {
+      setError('HLS is not supported in this browser');
+      setLoading(false);
+    }
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, [streamUrl]);
+
+  // Video event listeners
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+    const handleTimeUpdate = () => setCurrentTime(video.currentTime);
+    const handleDurationChange = () => setDuration(video.duration);
+    const handleVolumeChange = () => {
+      setIsMuted(video.muted);
+      setVolume(video.volume);
+    };
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('durationchange', handleDurationChange);
+    video.addEventListener('volumechange', handleVolumeChange);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    // Restore playback rate
+    video.playbackRate = playbackRate;
+
+    return () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('durationchange', handleDurationChange);
+      video.removeEventListener('volumechange', handleVolumeChange);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  // Handle volume changes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.volume = volume;
+  }, [volume]);
+
+  // Handle mute changes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = isMuted;
+  }, [isMuted]);
+
+  // Handle playback rate
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.playbackRate = playbackRate;
+  }, [playbackRate]);
+
+  // Handle quality level changes
+  useEffect(() => {
+    const hls = hlsRef.current;
+    if (!hls) return;
+    hls.currentLevel = currentLevel;
+  }, [currentLevel]);
+
+  // Save watch history on unmount
+  useEffect(() => {
+    return () => {
+      if (currentTime > 5 && channelId) {
+        fetch('/api/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            channelId,
+            durationSeconds: Math.floor(currentTime),
+          }),
+        }).catch(() => {});
+      }
+    };
+  }, [currentTime, channelId]);
+
+  // Auto-hide controls
+  useEffect(() => {
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+
+    if (isPlaying && controlsVisible) {
+      controlsTimeoutRef.current = setTimeout(() => {
+        setControlsVisible(false);
+      }, 5000);
+    }
+
+    return () => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    };
+  }, [isPlaying, controlsVisible]);
+
+  // Show controls on interaction
+  const handleInteraction = () => {
+    setControlsVisible(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+  };
+
+  // Fullscreen
+  const handleFullscreen = async () => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await container.requestFullscreen();
+      }
+      toggleFullscreen();
+    } catch (error) {
+      console.error('Fullscreen error:', error);
+    }
+  };
+
+  // Picture-in-Picture
+  const handlePiP = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        await video.requestPictureInPicture();
+      }
+      setIsPiP(!isPiP);
+    } catch (error) {
+      console.error('PiP error:', error);
+    }
+  };
+
+  // Remote control hook
+  useRemoteControl({
+    enabled: true,
+    onEnter: () => {
+      if (showSettings) {
+        toggleSettings();
+      } else {
+        togglePlay();
+      }
+    },
+    onBack: () => {
+      if (showSettings) {
+        toggleSettings();
+      } else if (onBack) {
+        onBack();
+      }
+    },
+    onArrowUp: handleInteraction,
+    onArrowDown: handleInteraction,
+    onArrowLeft: handleInteraction,
+    onArrowRight: handleInteraction,
+    onPlay: () => {
+      setIsPlaying(true);
+      videoRef.current?.play();
+    },
+    onPause: () => {
+      setIsPlaying(false);
+      videoRef.current?.pause();
+    },
+    onVolumeUp: () => {
+      setVolume(Math.min(1, volume + 0.1));
+    },
+    onVolumeDown: () => {
+      setVolume(Math.max(0, volume - 0.1));
+    },
+    onMute: toggleMute,
+    onFullscreen: handleFullscreen,
+  });
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'f':
+          handleFullscreen();
+          break;
+        case 'm':
+          toggleMute();
+          break;
+        case 'ArrowUp':
+          setVolume(Math.min(1, volume + 0.1));
+          break;
+        case 'ArrowDown':
+          setVolume(Math.max(0, volume - 0.1));
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [volume]);
+
+  return (
+    <div 
+      ref={containerRef}
+      className="relative w-full h-screen bg-black overflow-hidden"
+      onMouseMove={handleInteraction}
+      onClick={handleInteraction}
+    >
+      {/* Video Element */}
+      <video
+        ref={videoRef}
+        className="w-full h-full object-contain"
+        playsInline
+        onClick={(e) => e.stopPropagation()}
+      />
+
+      {/* Loading State */}
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+          <div className="text-center">
+            <div className="w-12 h-12 border-4 border-primary-500/30 border-t-primary-500 rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-white/60 text-sm">Loading stream...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+          <div className="text-center max-w-md px-4">
+            <div className="text-4xl mb-4">⚠️</div>
+            <h3 className="text-white font-semibold text-lg mb-2">Playback Error</h3>
+            <p className="text-white/60 text-sm mb-4">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-2 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Buffering Overlay */}
+      {buffering && !loading && !error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
+          <div className="w-8 h-8 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+        </div>
+      )}
+
+      {/* Channel Info (Top Left) */}
+      {controlsVisible && !error && (
+        <div className="absolute top-4 left-4 z-20 flex items-center gap-3 glass-dark rounded-2xl px-4 py-2">
+          {channelLogo ? (
+            <img
+              src={channelLogo}
+              alt={channelName}
+              className="w-8 h-8 rounded-lg object-contain bg-white/10 p-1"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-lg bg-primary-500/20 flex items-center justify-center">
+              <span className="text-sm">📺</span>
+            </div>
+          )}
+          <div>
+            <h2 className="text-white font-semibold text-sm truncate max-w-[200px]">
+              {channelName}
+            </h2>
+            <p className="text-white/50 text-xs">Live</p>
+          </div>
+        </div>
+      )}
+
+      {/* Back Button (Top Left) */}
+      {onBack && controlsVisible && !error && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onBack();
+          }}
+          className="absolute top-4 left-4 z-20 glass-dark rounded-full p-2 text-white/70 hover:text-white transition"
+        >
+          ← Back
+        </button>
+      )}
+
+      {/* Time Display (Bottom Center) */}
+      {controlsVisible && !error && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 text-white/60 text-sm font-mono glass-dark rounded-full px-4 py-1">
+          {formatTime(currentTime)} / {formatTime(duration)}
+        </div>
+      )}
+
+      {/* Player Controls */}
+      <PlayerControls
+        visible={controlsVisible}
+        isPlaying={isPlaying}
+        isMuted={isMuted}
+        volume={volume}
+        currentTime={currentTime}
+        duration={duration}
+        buffering={buffering}
+        playbackRate={playbackRate}
+        currentLevel={currentLevel}
+        availableLevels={availableLevels}
+        isFullscreen={isFullscreen}
+        isPiP={isPiP}
+        showSettings={showSettings}
+        showQualitySelector={showQualitySelector}
+        onTogglePlay={togglePlay}
+        onToggleMute={toggleMute}
+        onSetVolume={setVolume}
+        onSeek={seekTo}
+        onSetPlaybackRate={setPlaybackRate}
+        onSetQuality={setCurrentLevel}
+        onToggleFullscreen={handleFullscreen}
+        onTogglePiP={handlePiP}
+        onToggleSettings={toggleSettings}
+        onToggleQualitySelector={() => setShowQualitySelector(!showQualitySelector)}
+        onCloseSettings={() => setShowSettings(false)}
+        channelId={channelId}
+        channelName={channelName}
+      />
+
+      {/* Player Settings Modal */}
+      {showSettings && (
+        <PlayerSettings
+          currentLevel={currentLevel}
+          availableLevels={availableLevels}
+          playbackRate={playbackRate}
+          isMuted={isMuted}
+          volume={volume}
+          onSetQuality={setCurrentLevel}
+          onSetPlaybackRate={setPlaybackRate}
+          onToggleMute={toggleMute}
+          onSetVolume={setVolume}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Format time helper
+function formatTime(seconds: number): string {
+  if (!seconds || isNaN(seconds)) return '00:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+5. PLAYER CONTROLS COMPONENT
+Create components/player/PlayerControls.tsx:
+
+typescript
+// components/player/PlayerControls.tsx
+
+'use client';
+
+import {
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Maximize2,
+  Minimize2,
+  PictureInPicture,
+  Settings,
+  ChevronUp,
+  ChevronDown,
+} from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
+
+interface PlayerControlsProps {
+  visible: boolean;
+  isPlaying: boolean;
+  isMuted: boolean;
+  volume: number;
+  currentTime: number;
+  duration: number;
+  buffering: boolean;
+  playbackRate: number;
+  currentLevel: number;
+  availableLevels: Array<{ index: number; height: number; label: string }>;
+  isFullscreen: boolean;
+  isPiP: boolean;
+  showSettings: boolean;
+  showQualitySelector: boolean;
+  onTogglePlay: () => void;
+  onToggleMute: () => void;
+  onSetVolume: (volume: number) => void;
+  onSeek: (time: number) => void;
+  onSetPlaybackRate: (rate: number) => void;
+  onSetQuality: (level: number) => void;
+  onToggleFullscreen: () => void;
+  onTogglePiP: () => void;
+  onToggleSettings: () => void;
+  onToggleQualitySelector: () => void;
+  onCloseSettings: () => void;
+  channelId: string;
+  channelName: string;
+}
+
+export function PlayerControls({
+  visible,
+  isPlaying,
+  isMuted,
+  volume,
+  currentTime,
+  duration,
+  buffering,
+  playbackRate,
+  currentLevel,
+  availableLevels,
+  isFullscreen,
+  isPiP,
+  showSettings,
+  showQualitySelector,
+  onTogglePlay,
+  onToggleMute,
+  onSetVolume,
+  onSeek,
+  onSetPlaybackRate,
+  onSetQuality,
+  onToggleFullscreen,
+  onTogglePiP,
+  onToggleSettings,
+  onToggleQualitySelector,
+  onCloseSettings,
+  channelId,
+  channelName,
+}: PlayerControlsProps) {
+  // Calculate progress percentage
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  // Handle seek bar click
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    onSeek(x * duration);
+  };
+
+  // Handle volume slider change
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onSetVolume(parseFloat(e.target.value));
+  };
+
+  if (!visible) return null;
+
+  return (
+    <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-12 pb-4 px-4">
+      {/* Seek Bar */}
+      <div
+        className="relative w-full h-1.5 bg-white/20 rounded-full cursor-pointer group mb-3"
+        onClick={handleSeek}
+      >
+        <div
+          className="h-full bg-gradient-to-r from-primary-500 to-secondary-500 rounded-full transition-all duration-100"
+          style={{ width: `${progress}%` }}
+        />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ left: `calc(${progress}% - 6px)` }}
+        />
+      </div>
+
+      {/* Controls Row */}
+      <div className="flex items-center justify-between gap-2">
+        {/* Left Controls */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onTogglePlay}
+            className="p-2 rounded-full hover:bg-white/10 transition text-white"
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+          >
+            {isPlaying ? (
+              <Pause className="w-5 h-5" />
+            ) : (
+              <Play className="w-5 h-5 ml-0.5" />
+            )}
+          </button>
+
+          <button
+            onClick={onToggleMute}
+            className="p-2 rounded-full hover:bg-white/10 transition text-white/70 hover:text-white"
+            aria-label={isMuted ? 'Unmute' : 'Mute'}
+          >
+            {isMuted || volume === 0 ? (
+              <VolumeX className="w-4 h-4" />
+            ) : (
+              <Volume2 className="w-4 h-4" />
+            )}
+          </button>
+
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={isMuted ? 0 : volume}
+            onChange={handleVolumeChange}
+            className="w-16 md:w-24 h-1 bg-white/20 rounded-full appearance-none cursor-pointer accent-primary-500"
+            style={{
+              background: `linear-gradient(to right, #4F46E5 0%, #4F46E5 ${(isMuted ? 0 : volume) * 100}%, rgba(255,255,255,0.2) ${(isMuted ? 0 : volume) * 100}%, rgba(255,255,255,0.2) 100%)`,
+            }}
+          />
+
+          {/* Time Display */}
+          <span className="text-white/60 text-xs font-mono ml-2 hidden sm:inline">
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </span>
+        </div>
+
+        {/* Right Controls */}
+        <div className="flex items-center gap-1">
+          {/* Playback Rate */}
+          <button
+            onClick={() => {
+              const rates = [0.5, 0.75, 1, 1.25, 1.5, 2];
+              const currentIndex = rates.indexOf(playbackRate);
+              const nextIndex = (currentIndex + 1) % rates.length;
+              onSetPlaybackRate(rates[nextIndex]);
+            }}
+            className="p-1.5 rounded hover:bg-white/10 transition text-white/60 hover:text-white text-xs font-medium min-w-[28px]"
+          >
+            {playbackRate}x
+          </button>
+
+          {/* Quality Selector Toggle */}
+          {availableLevels.length > 0 && (
+            <button
+              onClick={onToggleQualitySelector}
+              className="p-1.5 rounded hover:bg-white/10 transition text-white/60 hover:text-white text-xs font-medium min-w-[32px] flex items-center gap-0.5"
+            >
+              {currentLevel === -1 ? 'Auto' : availableLevels[currentLevel]?.label || 'Auto'}
+              <ChevronUp className={cn('w-3 h-3 transition-transform', showQualitySelector && 'rotate-180')} />
+            </button>
+          )}
+
+          {/* Picture-in-Picture */}
+          {document.pictureInPictureEnabled && (
+            <button
+              onClick={onTogglePiP}
+              className="p-2 rounded-full hover:bg-white/10 transition text-white/70 hover:text-white"
+              aria-label="Picture-in-Picture"
+            >
+              <PictureInPicture className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Fullscreen */}
+          <button
+            onClick={onToggleFullscreen}
+            className="p-2 rounded-full hover:bg-white/10 transition text-white/70 hover:text-white"
+            aria-label={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="w-4 h-4" />
+            ) : (
+              <Maximize2 className="w-4 h-4" />
+            )}
+          </button>
+
+          {/* Settings */}
+          <button
+            onClick={onToggleSettings}
+            className="p-2 rounded-full hover:bg-white/10 transition text-white/70 hover:text-white"
+            aria-label="Settings"
+          >
+            <Settings className={cn('w-4 h-4 transition-transform', showSettings && 'rotate-90')} />
+          </button>
+        </div>
+      </div>
+
+      {/* Quality Selector Dropdown */}
+      {showQualitySelector && (
+        <div className="absolute bottom-full right-0 mb-2 glass-dark rounded-2xl p-2 min-w-[160px] border border-white/10">
+          <button
+            onClick={() => {
+              onSetQuality(-1);
+              onToggleQualitySelector();
+            }}
+            className={cn(
+              'w-full text-left px-3 py-2 rounded-lg text-sm transition',
+              currentLevel === -1
+                ? 'bg-primary-500/30 text-primary-300'
+                : 'text-white/70 hover:bg-white/10 hover:text-white'
+            )}
+          >
+            Auto
+            {currentLevel === -1 && ' ✓'}
+          </button>
+          {availableLevels.map((level) => (
+            <button
+              key={level.index}
+              onClick={() => {
+                onSetQuality(level.index);
+                onToggleQualitySelector();
+              }}
+              className={cn(
+                'w-full text-left px-3 py-2 rounded-lg text-sm transition',
+                currentLevel === level.index
+                  ? 'bg-primary-500/30 text-primary-300'
+                  : 'text-white/70 hover:bg-white/10 hover:text-white'
+              )}
+            >
+              {level.label}
+              {currentLevel === level.index && ' ✓'}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Format time helper
+function formatTime(seconds: number): string {
+  if (!seconds || isNaN(seconds)) return '00:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+6. PLAYER SETTINGS COMPONENT
+Create components/player/PlayerSettings.tsx:
+
+typescript
+// components/player/PlayerSettings.tsx
+
+'use client';
+
+import { X, Volume2, VolumeX, Gauge, Clock } from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
+
+interface PlayerSettingsProps {
+  currentLevel: number;
+  availableLevels: Array<{ index: number; height: number; label: string; bitrate: number }>;
+  playbackRate: number;
+  isMuted: boolean;
+  volume: number;
+  onSetQuality: (level: number) => void;
+  onSetPlaybackRate: (rate: number) => void;
+  onToggleMute: () => void;
+  onSetVolume: (volume: number) => void;
+  onClose: () => void;
+}
+
+const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+export function PlayerSettings({
+  currentLevel,
+  availableLevels,
+  playbackRate,
+  isMuted,
+  volume,
+  onSetQuality,
+  onSetPlaybackRate,
+  onToggleMute,
+  onSetVolume,
+  onClose,
+}: PlayerSettingsProps) {
+  return (
+    <div 
+      className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div 
+        className="glass-dark rounded-3xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto border border-white/10"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-white font-semibold text-lg">Settings</h3>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-white/10 transition text-white/60 hover:text-white"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Quality Section */}
+        <div className="mb-6">
+          <div className="flex items-center gap-2 text-white/60 text-xs font-medium uppercase tracking-wider mb-3">
+            <Gauge className="w-3.5 h-3.5" />
+            <span>Stream Quality</span>
+          </div>
+          <div className="space-y-1">
+            <button
+              onClick={() => onSetQuality(-1)}
+              className={cn(
+                'w-full text-left px-3 py-2.5 rounded-xl text-sm transition',
+                currentLevel === -1
+                  ? 'bg-primary-500/30 text-primary-300'
+                  : 'text-white/70 hover:bg-white/10 hover:text-white'
+              )}
+            >
+              <span className="flex justify-between items-center">
+                <span>Auto</span>
+                {currentLevel === -1 && <span className="text-primary-400">✓</span>}
+              </span>
+            </button>
+            {availableLevels.map((level) => (
+              <button
+                key={level.index}
+                onClick={() => onSetQuality(level.index)}
+                className={cn(
+                  'w-full text-left px-3 py-2.5 rounded-xl text-sm transition',
+                  currentLevel === level.index
+                    ? 'bg-primary-500/30 text-primary-300'
+                    : 'text-white/70 hover:bg-white/10 hover:text-white'
+                )}
+              >
+                <span className="flex justify-between items-center">
+                  <span>
+                    {level.label}
+                    <span className="text-white/40 text-xs ml-2">
+                      {Math.round(level.bitrate / 1000)} kbps
+                    </span>
+                  </span>
+                  {currentLevel === level.index && <span className="text-primary-400">✓</span>}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Playback Speed */}
+        <div className="mb-6">
+          <div className="flex items-center gap-2 text-white/60 text-xs font-medium uppercase tracking-wider mb-3">
+            <Clock className="w-3.5 h-3.5" />
+            <span>Playback Speed</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {PLAYBACK_RATES.map((rate) => (
+              <button
+                key={rate}
+                onClick={() => onSetPlaybackRate(rate)}
+                className={cn(
+                  'py-2.5 rounded-xl text-sm font-medium transition',
+                  playbackRate === rate
+                    ? 'bg-primary-500/30 text-primary-300'
+                    : 'text-white/70 hover:bg-white/10 hover:text-white'
+                )}
+              >
+                {rate}x
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Volume */}
+        <div>
+          <div className="flex items-center gap-2 text-white/60 text-xs font-medium uppercase tracking-wider mb-3">
+            <Volume2 className="w-3.5 h-3.5" />
+            <span>Volume</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onToggleMute}
+              className="p-2 rounded-lg hover:bg-white/10 transition text-white/70 hover:text-white"
+            >
+              {isMuted || volume === 0 ? (
+                <VolumeX className="w-4 h-4" />
+              ) : (
+                <Volume2 className="w-4 h-4" />
+              )}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={isMuted ? 0 : volume}
+              onChange={(e) => onSetVolume(parseFloat(e.target.value))}
+              className="flex-1 h-1 bg-white/20 rounded-full appearance-none cursor-pointer accent-primary-500"
+              style={{
+                background: `linear-gradient(to right, #4F46E5 0%, #4F46E5 ${(isMuted ? 0 : volume) * 100}%, rgba(255,255,255,0.2) ${(isMuted ? 0 : volume) * 100}%, rgba(255,255,255,0.2) 100%)`,
+              }}
+            />
+            <span className="text-white/60 text-sm font-mono min-w-[36px]">
+              {Math.round((isMuted ? 0 : volume) * 100)}%
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+7. PLAYER PAGE
+Create app/(main)/player/[channelId]/page.tsx:
+
+typescript
+// app/(main)/player/[channelId]/page.tsx
+
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { Player } from '@/components/player/Player';
+import { Loader2 } from 'lucide-react';
+
+interface Channel {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  streamUrl: string;
+  category: string | null;
+  country: string | null;
+  language: string | null;
+  isVerified: boolean;
+}
+
+export default function PlayerPage() {
+  const params = useParams();
+  const router = useRouter();
+  const channelId = params.channelId as string;
+  
+  const [channel, setChannel] = useState<Channel | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchChannel = async () => {
+      try {
+        const response = await fetch(`/api/channels/${channelId}`);
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error('Channel not found');
+          }
+          throw new Error('Failed to load channel');
+        }
+        
+        const data = await response.json();
+        setChannel(data.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Something went wrong');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (channelId) {
+      fetchChannel();
+    }
+  }, [channelId]);
+
+  const handleBack = () => {
+    router.push('/home');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto mb-4" />
+          <p className="text-white/60">Loading channel...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !channel) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="text-center max-w-md px-4">
+          <div className="text-4xl mb-4">😕</div>
+          <h3 className="text-white font-semibold text-lg mb-2">Channel Unavailable</h3>
+          <p className="text-white/60 text-sm mb-6">{error || 'Channel not found'}</p>
+          <button
+            onClick={handleBack}
+            className="px-6 py-2.5 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Player
+      channelId={channel.id}
+      streamUrl={channel.streamUrl}
+      channelName={channel.name}
+      channelLogo={channel.logoUrl}
+      onBack={handleBack}
+    />
+  );
+}
+8. SINGLE CHANNEL API
+Create app/api/channels/[channelId]/route.ts:
+
+typescript
+// app/api/channels/[channelId]/route.ts
+
+import { NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import { channels } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
+
+export async function GET(
+  req: Request,
+  { params }: { params: { channelId: string } }
+) {
+  try {
+    const { channelId } = params;
+    
+    const channel = await db
+      .select()
+      .from(channels)
+      .where(eq(channels.id, channelId))
+      .limit(1);
+
+    if (channel.length === 0) {
+      return NextResponse.json(
+        { error: 'Channel not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ data: channel[0] });
+  } catch (error) {
+    console.error('Channel API error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch channel' },
+      { status: 500 }
+    );
+  }
+}
+9. KEYBOARD SHORTCUTS REFERENCE
+Create components/player/KeyboardShortcuts.tsx (optional helper):
+
+typescript
+// components/player/KeyboardShortcuts.tsx
+
+'use client';
+
+import { useEffect } from 'react';
+
+interface KeyboardShortcutsProps {
+  onPlay?: () => void;
+  onPause?: () => void;
+  onTogglePlay?: () => void;
+  onToggleMute?: () => void;
+  onVolumeUp?: () => void;
+  onVolumeDown?: () => void;
+  onSeekForward?: (seconds: number) => void;
+  onSeekBackward?: (seconds: number) => void;
+  onFullscreen?: () => void;
+  onPiP?: () => void;
+  enabled?: boolean;
+}
+
+const SEEK_STEP = 10;
+
+export function KeyboardShortcuts({
+  onPlay,
+  onPause,
+  onTogglePlay,
+  onToggleMute,
+  onVolumeUp,
+  onVolumeDown,
+  onSeekForward,
+  onSeekBackward,
+  onFullscreen,
+  onPiP,
+  enabled = true,
+}: KeyboardShortcutsProps) {
+  useEffect(() => {
+    if (!enabled) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          onTogglePlay?.();
+          break;
+          
+        case 'k':
+          onTogglePlay?.();
+          break;
+          
+        case 'f':
+          e.preventDefault();
+          onFullscreen?.();
+          break;
+          
+        case 'm':
+          onToggleMute?.();
+          break;
+          
+        case 'ArrowUp':
+          e.preventDefault();
+          onVolumeUp?.();
+          break;
+          
+        case 'ArrowDown':
+          e.preventDefault();
+          onVolumeDown?.();
+          break;
+          
+        case 'ArrowRight':
+          e.preventDefault();
+          onSeekForward?.(SEEK_STEP);
+          break;
+          
+        case 'ArrowLeft':
+          e.preventDefault();
+          onSeekBackward?.(SEEK_STEP);
+          break;
+          
+        case 'MediaPlay':
+          onPlay?.();
+          break;
+          
+        case 'MediaPause':
+          onPause?.();
+          break;
+          
+        case 'MediaPlayPause':
+          onTogglePlay?.();
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [enabled]);
+
+  return null;
+}
+10. VERIFICATION CHECKLIST
+After the AI generates the code:
+
+Player Functionality
+□ Navigate to /player/[channelId] from any channel card
+□ Video loads and plays using HLS.js
+□ Play/Pause button works
+□ Volume slider and mute work
+□ Seek bar works (click to seek)
+□ Fullscreen mode works
+□ Picture-in-Picture works (if supported)
+Quality Controls
+□ Quality selector shows available bitrates
+□ Manual quality selection works
+□ "Auto" mode works
+Smart TV / Remote Control
+□ D-pad navigation works (Arrow keys)
+□ Enter key selects focused element
+□ Escape key closes settings
+□ Focus rings are visible (4px indigo)
+□ All interactive elements are focusable
+Keyboard Shortcuts
+□ Space bar toggles play/pause
+□ F key toggles fullscreen
+□ M key toggles mute
+□ Arrow Up/Down adjusts volume
+□ Arrow Left/Right seeks
+Watch History
+□ Watch history is saved after viewing
+□ History appears in API response

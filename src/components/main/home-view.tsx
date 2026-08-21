@@ -8,11 +8,25 @@ import { GradientButton } from '@/components/glass/gradient-button'
 import { useAuthStore } from '@/lib/store/auth-store'
 import { useAppStore } from '@/lib/store/app-store'
 import { useFavorites } from '@/lib/hooks/use-favorites'
+import { useWatchHistory } from '@/lib/hooks/use-watch-history'
 import type { Channel } from '@/lib/types'
 import { ChannelCardSkeleton } from './channel-card-skeleton'
 
 interface ChannelsResponse {
   channels?: Channel[]
+  error?: string
+}
+
+interface HistoryEntry {
+  id: number
+  channelId: string
+  watchedAt: string
+  durationSeconds: number | null
+  channel: Channel
+}
+
+interface HistoryResponse {
+  data?: HistoryEntry[]
   error?: string
 }
 
@@ -73,29 +87,26 @@ export function HomeView() {
   const openPlayer = useAppStore((s) => s.openPlayer)
   const { channels, loading } = useChannels(20)
   const { favoriteIds, isFavorite, toggleFavorite } = useFavorites()
+  const { history, loading: historyLoading } = useWatchHistory()
 
   const displayName = user?.displayName || 'TV Lover'
   const onboardingCompleted = user?.onboardingCompleted ?? false
   const greeting = React.useMemo(() => getGreeting(), [])
 
-  // Convert favoriteIds Set -> Channel[] for "Continue Watching".
-  // For Phase 1 we surface the user's first 4 favorites; if they have none,
-  // fall back to the first 4 verified channels as a teaser.
+  // Continue Watching: REAL watch history from /api/history.
+  // Dedupes by channelId (most recent first) and caps at 4.
   const continueWatching = React.useMemo<Channel[]>(() => {
-    if (channels.length === 0) return []
-    const favs = channels.filter(
-      (c) => favoriteIds.has(c.id) && c.isVerified !== false,
-    )
-    if (favs.length >= 4) return favs.slice(0, 4)
-    const favsAny = channels.filter((c) => favoriteIds.has(c.id))
-    if (favsAny.length >= 4) return favsAny.slice(0, 4)
-    const merged = [...favsAny]
-    for (const c of channels) {
-      if (merged.length >= 4) break
-      if (!merged.some((m) => m.id === c.id)) merged.push(c)
+    const seen = new Set<string>()
+    const result: Channel[] = []
+    for (const h of history) {
+      if (!seen.has(h.channelId) && h.channel) {
+        seen.add(h.channelId)
+        result.push(h.channel)
+      }
+      if (result.length >= 4) break
     }
-    return merged.slice(0, 4)
-  }, [channels, favoriteIds])
+    return result
+  }, [history])
 
   const recommended = React.useMemo<Channel[]>(() => {
     // Prefer verified channels for the recommendation strip.
@@ -146,35 +157,27 @@ export function HomeView() {
         </div>
       </section>
 
-      {/* Continue Watching */}
-      <section>
-        <SectionHeader title="Continue Watching" />
-        {loading ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <ChannelCardSkeleton key={i} />
-            ))}
-          </div>
-        ) : continueWatching.length === 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <ChannelCardSkeleton key={i} />
-            ))}
-          </div>
-        ) : (
+      {/* Continue Watching — only shows when the user has watch history */}
+      {historyLoading ? null : continueWatching.length > 0 ? (
+        <section>
+          <SectionHeader title="Continue Watching" />
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {continueWatching.map((channel) => (
-              <ChannelCard
-                key={channel.id}
-                channel={channel}
-                favorited={isFavorite(channel.id)}
-                onToggleFavorite={() => toggleFavorite(channel.id)}
-                onClick={() => openPlayer(channel)}
-              />
+              <div key={channel.id} className="relative">
+                <ChannelCard
+                  channel={channel}
+                  favorited={isFavorite(channel.id)}
+                  onToggleFavorite={() => toggleFavorite(channel.id)}
+                  onClick={() => openPlayer(channel)}
+                />
+                <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-primary/90 text-primary-foreground text-[10px] font-semibold uppercase tracking-wide">
+                  Resume
+                </span>
+              </div>
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      ) : null}
 
       {/* Recommended */}
       <section>

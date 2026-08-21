@@ -12,7 +12,7 @@ import { SignupForm } from '@/components/auth/SignupForm'
 import { OnboardingFlow } from '@/components/auth/OnboardingFlow'
 import { AppShell } from '@/components/main/app-shell'
 import { PreviewPopup } from '@/components/popup/preview-popup'
-import { PlayerOverlay } from '@/components/player/player-overlay'
+import { Player } from '@/components/player/player'
 import type { Channel } from '@/lib/types'
 
 /**
@@ -203,12 +203,15 @@ function PreviewPopupHost() {
   )
 }
 
-/** Renders the full-screen PlayerOverlay when `playerChannel` is set. */
+/** Renders the full-screen Player when `playerChannel` is set. */
 function PlayerOverlayHost() {
   const playerChannel = useAppStore((s) => s.playerChannel)
+  const closePlayer = useAppStore((s) => s.closePlayer)
   return (
     <AnimatePresence>
-      {playerChannel ? <PlayerOverlay /> : null}
+      {playerChannel ? (
+        <Player channel={playerChannel} onBack={closePlayer} />
+      ) : null}
     </AnimatePresence>
   )
 }
