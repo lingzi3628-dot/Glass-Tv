@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { motion } from 'framer-motion'
-import { Clock, Gauge, Volume2, VolumeX, X } from 'lucide-react'
+import { Clock, Gauge, Languages, Volume2, VolumeX, X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import type { QualityLevel } from '@/lib/store/player-store'
@@ -30,9 +30,30 @@ export interface PlayerSettingsProps {
   onSetVolume: (v: number) => void
   onToggleMute: () => void
   onClose: () => void
+  // Phase 4: captions settings
+  captionsEnabled?: boolean
+  captionsLanguage?: string
+  captionFontSize?: number
+  onToggleCaptions?: () => void
+  onCaptionLanguageChange?: (lang: string) => void
+  onCaptionFontSizeChange?: (size: number) => void
 }
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2]
+
+const CAPTION_LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+  { code: 'it', label: 'Italian' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'ko', label: 'Korean' },
+  { code: 'zh', label: 'Chinese' },
+  { code: 'ar', label: 'Arabic' },
+  { code: 'hi', label: 'Hindi' },
+]
 
 export function PlayerSettings({
   visible,
@@ -46,6 +67,12 @@ export function PlayerSettings({
   onSetVolume,
   onToggleMute,
   onClose,
+  captionsEnabled = true,
+  captionsLanguage = 'en',
+  captionFontSize = 18,
+  onToggleCaptions,
+  onCaptionLanguageChange,
+  onCaptionFontSizeChange,
 }: PlayerSettingsProps) {
   const effectiveVolume = isMuted ? 0 : volume
 
@@ -214,6 +241,89 @@ export function PlayerSettings({
             <span className="text-sm w-12 text-right tabular-nums">
               {Math.round(effectiveVolume * 100)}%
             </span>
+          </div>
+        </div>
+
+        {/* Phase 4: AI Captions */}
+        <div className="mb-6">
+          <div className="flex items-center gap-2 text-white/60 text-xs font-medium uppercase tracking-wider mb-3">
+            <Languages className="h-3.5 w-3.5" />
+            <span>AI Captions</span>
+          </div>
+          <div className="space-y-3">
+            {/* Enable toggle */}
+            <div className="flex items-center justify-between">
+              <span className="text-white/70 text-sm">Enable captions</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={captionsEnabled}
+                aria-label="Toggle AI captions"
+                onClick={onToggleCaptions}
+                className={cn(
+                  'relative w-12 h-7 rounded-full transition-colors',
+                  captionsEnabled ? 'bg-primary' : 'bg-white/20',
+                )}
+              >
+                <span
+                  className={cn(
+                    'absolute top-1 w-5 h-5 rounded-full bg-white transition-transform',
+                    captionsEnabled ? 'translate-x-6' : 'translate-x-1',
+                  )}
+                />
+              </button>
+            </div>
+
+            {/* Language */}
+            {captionsEnabled ? (
+              <div>
+                <label
+                  htmlFor="caption-lang"
+                  className="text-white/50 text-xs block mb-1.5"
+                >
+                  Caption language
+                </label>
+                <select
+                  id="caption-lang"
+                  value={captionsLanguage}
+                  onChange={(e) => onCaptionLanguageChange?.(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {CAPTION_LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code} className="text-gray-900">
+                      {l.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            {/* Font size */}
+            {captionsEnabled ? (
+              <div>
+                <div className="flex justify-between text-white/50 text-xs mb-1.5">
+                  <span>Font size</span>
+                  <span className="tabular-nums">{captionFontSize}px</span>
+                </div>
+                <input
+                  type="range"
+                  min={12}
+                  max={32}
+                  step={1}
+                  value={captionFontSize}
+                  onChange={(e) =>
+                    onCaptionFontSizeChange?.(parseInt(e.target.value, 10))
+                  }
+                  className="w-full h-1 bg-white/20 rounded-full appearance-none cursor-pointer accent-primary"
+                  style={{
+                    background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${((captionFontSize - 12) / 20) * 100}%, rgba(255,255,255,0.2) ${((captionFontSize - 12) / 20) * 100}%, rgba(255,255,255,0.2) 100%)`,
+                    borderRadius: '9999px',
+                    appearance: 'none',
+                    WebkitAppearance: 'none',
+                  }}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
       </motion.div>

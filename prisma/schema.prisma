@@ -21,9 +21,10 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  preferences UserPreference?
-  favorites   Favorite[]
-  history     WatchHistory[]
+  preferences   UserPreference?
+  favorites     Favorite[]
+  history       WatchHistory[]
+  captionSetting CaptionSetting?
 }
 
 // User Preferences - collected during the AI onboarding flow.
@@ -56,8 +57,9 @@ model Channel {
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
-  favorites Favorite[]
-  history   WatchHistory[]
+  favorites  Favorite[]
+  history    WatchHistory[]
+  captions   CaptionsCache[]
 }
 
 // Favorites - user <-> channel join with composite primary key.
@@ -80,4 +82,34 @@ model WatchHistory {
   durationSeconds Int?
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   channel         Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+}
+
+// AI Captions Cache — stores transcribed audio chunks so we never re-process
+// the same segment. The composite unique constraint prevents duplicates.
+model CaptionsCache {
+  id        Int      @id @default(autoincrement())
+  channelId String
+  timestamp Int      // seconds into the stream when this chunk was captured
+  text      String
+  language  String   @default("en")
+  createdAt DateTime @default(now())
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, timestamp, language])
+  @@index([channelId, language, timestamp])
+}
+
+// Per-user caption styling + language preference
+model CaptionSetting {
+  id             Int      @id @default(autoincrement())
+  userId         String   @unique
+  enabled        Boolean  @default(true)
+  language       String   @default("en")
+  fontSize       Int      @default(18)
+  fontColor      String   @default("#FFFFFF")
+  backgroundColor String  @default("rgba(0,0,0,0.75)")
+  position       String   @default("bottom") // bottom | middle | top
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

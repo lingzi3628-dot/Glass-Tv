@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import {
   AlertCircle,
   ArrowLeft,
+  Captions,
   Heart,
   Loader2,
   Play,
@@ -17,9 +18,11 @@ import { cn } from '@/lib/utils'
 import type { Channel } from '@/lib/types'
 import { usePlayerStore, type QualityLevel } from '@/lib/store/player-store'
 import { useFavorites } from '@/lib/hooks/use-favorites'
+import { useCaptionSettings } from '@/lib/hooks/use-caption-settings'
 import { useRemoteControl } from '@/hooks/use-remote-control'
 import { PlayerControls } from './player-controls'
 import { PlayerSettings } from './player-settings'
+import { CaptionsController } from './captions-controller'
 
 /**
  * Player
@@ -96,6 +99,15 @@ export function Player({ channel, onBack }: PlayerProps) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const hlsRef = React.useRef<Hls | null>(null)
 
+  // Phase 4: track the video element in state so we can pass it to
+  // <CaptionsController> without accessing videoRef.current during render
+  // (which would violate the react-hooks/refs lint rule).
+  const [videoEl, setVideoEl] = React.useState<HTMLVideoElement | null>(null)
+  const videoCallbackRef = React.useCallback((el: HTMLVideoElement | null) => {
+    videoRef.current = el
+    setVideoEl(el)
+  }, [])
+
   // --- Store state (subscribe to slices to minimize re-renders) ---
   const isPlaying = usePlayerStore((s) => s.isPlaying)
   const isMuted = usePlayerStore((s) => s.isMuted)
@@ -141,6 +153,10 @@ export function Player({ channel, onBack }: PlayerProps) {
 
   const { isFavorite, toggleFavorite } = useFavorites()
   const favorited = isFavorite(channel.id)
+
+  // Phase 4: AI captions settings (language, font size, enable/disable).
+  const { settings: captionSettings, updateSettings: updateCaptionSettings } =
+    useCaptionSettings()
 
   // Reset store + local state on channel change / mount.
   React.useEffect(() => {
@@ -639,7 +655,7 @@ export function Player({ channel, onBack }: PlayerProps) {
       aria-label={`Now playing ${channel.name}`}
     >
       <video
-        ref={videoRef}
+        ref={videoCallbackRef}
         className="w-full h-full object-contain bg-black"
         playsInline
         aria-label={`${channel.name} live stream`}
@@ -695,6 +711,23 @@ export function Player({ channel, onBack }: PlayerProps) {
         </div>
       ) : null}
 
+      {/* Phase 4: AI Captions — captures audio from the video, transcribes via
+          the ASR skill, and overlays subtitles. Falls back to demo captions
+          when the stream is cross-origin (CORS prevents audio capture). */}
+      {!showError && !loading && videoEl && streamUrl ? (
+        <CaptionsController
+          videoElement={videoEl}
+          channelId={channel.id}
+          channelName={channel.name}
+          enabled={captionSettings.enabled}
+          language={captionSettings.language}
+          fontSize={captionSettings.fontSize}
+          fontColor={captionSettings.fontColor}
+          backgroundColor={captionSettings.backgroundColor}
+          position={captionSettings.position}
+        />
+      ) : null}
+
       {/* Top bar */}
       {controlsVisible && !showError ? (
         <div className="absolute top-0 left-0 right-0 z-20 flex items-start justify-between gap-3 p-3 sm:p-4 bg-gradient-to-b from-black/80 to-transparent">
@@ -742,6 +775,29 @@ export function Player({ channel, onBack }: PlayerProps) {
                 className={cn(
                   'h-5 w-5',
                   favorited ? 'fill-red-500 text-red-500' : 'text-white',
+                )}
+              />
+            </button>
+            {/* Phase 4: AI captions toggle */}
+            <button
+              type="button"
+              aria-label={
+                captionSettings.enabled
+                  ? 'Disable AI captions'
+                  : 'Enable AI captions'
+              }
+              aria-pressed={captionSettings.enabled}
+              onClick={() =>
+                updateCaptionSettings({ enabled: !captionSettings.enabled })
+              }
+              className="player-focusable p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center"
+            >
+              <Captions
+                className={cn(
+                  'h-5 w-5',
+                  captionSettings.enabled
+                    ? 'text-primary-foreground bg-primary rounded-md p-0.5 -m-0.5'
+                    : 'text-white',
                 )}
               />
             </button>
@@ -812,6 +868,18 @@ export function Player({ channel, onBack }: PlayerProps) {
         onSetVolume={setVolume}
         onToggleMute={toggleMute}
         onClose={() => setShowSettings(false)}
+        captionsEnabled={captionSettings.enabled}
+        captionsLanguage={captionSettings.language}
+        captionFontSize={captionSettings.fontSize}
+        onToggleCaptions={() =>
+          updateCaptionSettings({ enabled: !captionSettings.enabled })
+        }
+        onCaptionLanguageChange={(lang) =>
+          updateCaptionSettings({ language: lang })
+        }
+        onCaptionFontSizeChange={(size) =>
+          updateCaptionSettings({ fontSize: size })
+        }
       />
     </motion.div>
   )
