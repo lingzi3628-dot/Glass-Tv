@@ -44,21 +44,24 @@ export async function GET(request: Request) {
     switch (action) {
       case 'trending': {
         const limit = parseLimit(url.searchParams.get('limit'))
+        const dramas = await getTrendingDramas(limit)
         return NextResponse.json(
-          { dramas: getTrendingDramas(limit) },
+          { dramas },
           { status: 200 },
         )
       }
       case 'new': {
         const limit = parseLimit(url.searchParams.get('limit'))
+        const dramas = await getNewDramas(limit)
         return NextResponse.json(
-          { dramas: getNewDramas(limit) },
+          { dramas },
           { status: 200 },
         )
       }
       case 'all': {
+        const dramas = await getAllDramas()
         return NextResponse.json(
-          { dramas: getAllDramas() },
+          { dramas },
           { status: 200 },
         )
       }
@@ -73,15 +76,17 @@ export async function GET(request: Request) {
         if (!genre.trim()) {
           return badRequest('genre is required for action=byGenre')
         }
+        const dramas = await getDramasByGenre(genre)
         return NextResponse.json(
-          { dramas: getDramasByGenre(genre) },
+          { dramas },
           { status: 200 },
         )
       }
       case 'search': {
         const q = url.searchParams.get('q') ?? ''
+        const dramas = await searchDramas(q)
         return NextResponse.json(
-          { dramas: searchDramas(q), query: q },
+          { dramas, query: q },
           { status: 200 },
         )
       }

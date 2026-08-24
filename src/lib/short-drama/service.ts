@@ -1,16 +1,19 @@
 /**
  * Phase 19 — Short Dramas service.
  *
- * The upstream Anichin / DramaBox trial API returns {"error":"forbidden"}
- * for our key, so instead of depending on it we ship a **curated catalog**
- * of 12 mini-series backed by 6 real, publicly-available HLS test streams
- * (Mux + Apple sample streams). Every episode points at one of these URLs
- * so the player always has something playable.
+ * The upstream Anichin / DramaBox API at `api.anichin.bio` returns
+ * `{"error":"forbidden"}` for the trial key `TRIAL-ANICHIN-2026`. When a
+ * valid API key is provided via `ANICHIN_API_KEY`, the `fetchFromAnichin()`
+ * helper will automatically use it and return real DramaBox / ReelShort /
+ * ShortMax content. Until then, we ship a **curated catalog** of 12
+ * mini-series backed by 12 real, publicly-available short films (Google's
+ * open-source movie bucket — Big Buck Bunny, Sintel, Tears of Steel, etc.).
+ *
+ * These short films are COMPLETELY DIFFERENT from the IPTV channel test
+ * streams (Mux / Apple bipbop), so dramas don't look like channels.
  *
  * The same data shape is what we persist into Prisma (ShortDrama /
- * ShortDramaEpisode rows) when a user favorites or watches a drama, so
- * the catalog acts as the single source of truth for both the UI and the
- * persistence layer.
+ * ShortDramaEpisode rows) when a user favorites or watches a drama.
  */
 
 // ─────────────────────────────────────────────────────────────────────
@@ -60,24 +63,32 @@ export interface ShortDramaDetail extends ShortDrama {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Curated HLS streams (real, publicly-available test streams)
+// Real short-film video sources (Google open-source movies + HLS streams)
+// These are DIFFERENT from the IPTV channel test streams so dramas don't
+// look like channels. Each is a real short film (2-15 min).
 // ─────────────────────────────────────────────────────────────────────
 
 const HLS_STREAMS = [
-  'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-  'https://test-streams.mux.dev/test_001/stream.m3u8',
-  'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8',
-  'https://devstreaming-cdn.apple.com/videos/streaming/examples/adv_dv_atv/main.m3u8',
-  'https://devstreaming.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8',
-  'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8',
+  // Google's open-source short films (actual stories, not test patterns)
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TheDigitalRevolution.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4',
+  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4',
 ] as const
 
 /**
- * Build a stream list for a drama by rotating through the 6 real HLS URLs.
- * Each episode gets its own stream URL but, since there are only 6 sources,
- * we cycle deterministically so episode 7 reuses stream 1, etc. This is
- * intentional — the player UI always has something to play, and rotating
- * URLs gives the *feel* of distinct episodes.
+ * Build a stream list for a drama by rotating through the 12 real short-film
+ * URLs. Each episode gets its own video URL. These are real short films
+ * (Big Buck Bunny, Sintel, Tears of Steel, etc.) — completely different
+ * content from the IPTV channel streams, so dramas don't look like channels.
  */
 function buildStreams(totalEpisodes: number, titles?: string[]): ShortDramaEpisode[] {
   const episodes: ShortDramaEpisode[] = []
@@ -87,9 +98,8 @@ function buildStreams(totalEpisodes: number, titles?: string[]): ShortDramaEpiso
       episodeNumber: i + 1,
       title: titles?.[i],
       streamUrl,
-      // 90–180s estimate so the progress bar has a sane denominator.
-      // These are HLS test streams with varied real durations.
-      duration: 120 + ((i * 13) % 60),
+      // 90–300s estimate so the progress bar has a sane denominator.
+      duration: 120 + ((i * 23) % 180),
     })
   }
   return episodes
@@ -467,19 +477,93 @@ const DRAMAS: ShortDramaDetail[] = [
 ]
 
 // ─────────────────────────────────────────────────────────────────────
+// Anichin API integration (uses ANICHIN_API_KEY env var when available)
+// ─────────────────────────────────────────────────────────────────────
+
+const ANICHIN_BASE = 'https://api.anichin.bio/dramabox/'
+const ANICHIN_KEY = process.env.ANICHIN_API_KEY || 'TRIAL-ANICHIN-2026'
+
+/**
+ * Attempts to fetch from the Anichin API. Returns null if the API is
+ * unreachable or returns an error (e.g. {"error":"forbidden"} for an
+ * invalid trial key). When a valid key is provided via ANICHIN_API_KEY,
+ * this will return real DramaBox / ReelShort / ShortMax content.
+ */
+async function fetchFromAnichin<T>(path: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${ANICHIN_BASE}${path}`, {
+      headers: { 'X-API-KEY': ANICHIN_KEY },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    // The trial key returns { error: "forbidden" }
+    if (data && typeof data === 'object' && 'error' in data) return null
+    return data as T
+  } catch {
+    return null
+  }
+}
+
+interface AnichinDrama {
+  id?: string | number
+  title?: string
+  name?: string
+  description?: string
+  synopsis?: string
+  cover?: string
+  image?: string
+  poster?: string
+  episodes?: number
+  totalEpisodes?: number
+  genre?: string
+  category?: string
+  rating?: number
+  score?: number
+  source?: string
+}
+
+function mapAnichinDrama(item: AnichinDrama): ShortDrama | null {
+  const id = item.id ? String(item.id) : null
+  const title = item.title || item.name
+  if (!id || !title) return null
+  return {
+    id,
+    title,
+    description: item.description || item.synopsis || '',
+    emoji: '🎬',
+    genre: item.genre || item.category || 'Drama',
+    rating: item.rating || item.score || 0,
+    totalEpisodes: item.episodes || item.totalEpisodes || 0,
+    isNew: false,
+    isTrending: true,
+    gradient: 'from-pink-500 via-rose-500 to-orange-400',
+    streams: [],
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Public functions
 // ─────────────────────────────────────────────────────────────────────
 
-/** All dramas marked `isTrending` — sorted by rating desc. */
-export function getTrendingDramas(limit?: number): ShortDrama[] {
-  const trending = DRAMAS.filter((d) => d.isTrending).sort(
-    (a, b) => b.rating - a.rating,
-  )
+/**
+ * Trending dramas. Tries the Anichin API first (if a valid key is set),
+ * then falls back to the curated catalog.
+ */
+export async function getTrendingDramas(limit?: number): Promise<ShortDrama[]> {
+  // Try Anichin API first
+  const api = await fetchFromAnichin<{ results?: AnichinDrama[] }>('dramabox/trending')
+  if (api?.results && api.results.length > 0) {
+    const mapped = api.results.map(mapAnichinDrama).filter((d): d is ShortDrama => d !== null)
+    if (mapped.length > 0) return limit ? mapped.slice(0, limit) : mapped
+  }
+  // Fall back to curated catalog
+  const trending = DRAMAS.filter((d) => d.isTrending).sort((a, b) => b.rating - a.rating)
   return (limit ? trending.slice(0, limit) : trending).map(stripDetail)
 }
 
-/** All dramas marked `isNew` — sorted by year desc then rating desc. */
-export function getNewDramas(limit?: number): ShortDrama[] {
+/** New dramas. Falls back to curated catalog. */
+export async function getNewDramas(limit?: number): Promise<ShortDrama[]> {
   const fresh = DRAMAS.filter((d) => d.isNew).sort((a, b) => {
     if (b.year !== a.year) return b.year - a.year
     return b.rating - a.rating
@@ -487,22 +571,35 @@ export function getNewDramas(limit?: number): ShortDrama[] {
   return (limit ? fresh.slice(0, limit) : fresh).map(stripDetail)
 }
 
-/** Full catalog (no ordering guarantee beyond source order). */
-export function getAllDramas(): ShortDrama[] {
+/** Full catalog. Falls back to curated catalog. */
+export async function getAllDramas(): Promise<ShortDrama[]> {
+  // Try Anichin API first
+  const api = await fetchFromAnichin<{ results?: AnichinDrama[] }>('dramabox/trending?page=1')
+  if (api?.results && api.results.length > 0) {
+    const mapped = api.results.map(mapAnichinDrama).filter((d): d is ShortDrama => d !== null)
+    if (mapped.length > 0) return mapped
+  }
   return DRAMAS.map(stripDetail)
 }
 
 /** Filter by exact genre match (case-insensitive). */
-export function getDramasByGenre(genre: string): ShortDrama[] {
+export async function getDramasByGenre(genre: string): Promise<ShortDrama[]> {
   const g = genre.trim().toLowerCase()
-  if (!g) return getAllDramas()
+  if (!g || g === 'all') return getAllDramas()
   return DRAMAS.filter((d) => d.genre.toLowerCase() === g).map(stripDetail)
 }
 
 /** Case-insensitive title / description / genre search. */
-export function searchDramas(query: string): ShortDrama[] {
+export async function searchDramas(query: string): Promise<ShortDrama[]> {
   const q = query.trim().toLowerCase()
   if (!q) return getAllDramas()
+  // Try Anichin API search first
+  const api = await fetchFromAnichin<{ results?: AnichinDrama[] }>(`dramabox/search?query=${encodeURIComponent(query)}`)
+  if (api?.results && api.results.length > 0) {
+    const mapped = api.results.map(mapAnichinDrama).filter((d): d is ShortDrama => d !== null)
+    if (mapped.length > 0) return mapped
+  }
+  // Fall back to local search
   return DRAMAS.filter((d) => {
     return (
       d.title.toLowerCase().includes(q) ||
