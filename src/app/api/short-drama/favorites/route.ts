@@ -117,7 +117,7 @@ export async function POST(request: Request) {
     }
 
     // Resolve from the in-code catalog so we have canonical metadata.
-    const detail = getDramaDetails(externalId)
+    const detail = await getDramaDetails(externalId)
     if (!detail) {
       return NextResponse.json(
         { error: 'drama not found in catalog' },

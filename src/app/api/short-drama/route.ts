@@ -66,8 +66,9 @@ export async function GET(request: Request) {
         )
       }
       case 'genres': {
+        const genres = await getAvailableGenres()
         return NextResponse.json(
-          { genres: getAvailableGenres() },
+          { genres },
           { status: 200 },
         )
       }
@@ -93,7 +94,7 @@ export async function GET(request: Request) {
       case 'details': {
         const id = url.searchParams.get('id') ?? ''
         if (!id.trim()) return badRequest('id is required for action=details')
-        const drama = getDramaDetails(id)
+        const drama = await getDramaDetails(id)
         if (!drama) {
           return NextResponse.json(
             { error: 'drama not found' },
@@ -105,15 +106,16 @@ export async function GET(request: Request) {
       case 'episodes': {
         const id = url.searchParams.get('id') ?? ''
         if (!id.trim()) return badRequest('id is required for action=episodes')
-        const drama = getDramaDetails(id)
+        const drama = await getDramaDetails(id)
         if (!drama) {
           return NextResponse.json(
             { error: 'drama not found' },
             { status: 404 },
           )
         }
+        const episodes = await getDramaEpisodes(id)
         return NextResponse.json(
-          { episodes: getDramaEpisodes(id), totalEpisodes: drama.totalEpisodes },
+          { episodes, totalEpisodes: drama.totalEpisodes },
           { status: 200 },
         )
       }
@@ -125,7 +127,7 @@ export async function GET(request: Request) {
         if (!Number.isFinite(episodeNumber) || episodeNumber < 1) {
           return badRequest('episode (positive integer) is required for action=stream')
         }
-        const result = getEpisodeStream(id, episodeNumber)
+        const result = await getEpisodeStream(id, episodeNumber)
         if (!result) {
           return NextResponse.json(
             { error: 'episode not found' },

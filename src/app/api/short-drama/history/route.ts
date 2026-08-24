@@ -157,7 +157,7 @@ export async function POST(request: Request) {
     }
 
     // Resolve the catalog episode so we have authoritative metadata + stream.
-    const resolved = getEpisodeStream(externalId, episodeNumber)
+    const resolved = await getEpisodeStream(externalId, episodeNumber)
     if (!resolved) {
       return NextResponse.json(
         { error: 'drama or episode not found in catalog' },

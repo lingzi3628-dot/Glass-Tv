@@ -477,68 +477,157 @@ const DRAMAS: ShortDramaDetail[] = [
 ]
 
 // ─────────────────────────────────────────────────────────────────────
-// Anichin API integration (uses ANICHIN_API_KEY env var when available)
+// Apify DramaBox API integration (real drama data)
 // ─────────────────────────────────────────────────────────────────────
 
-const ANICHIN_BASE = 'https://api.anichin.bio/dramabox/'
-const ANICHIN_KEY = process.env.ANICHIN_API_KEY || 'TRIAL-ANICHIN-2026'
+const APIFY_TOKEN = process.env.APIFY_TOKEN || ''
+const APIFY_ACTOR = 'ezvidnet~short-drama-api'
+const APIFY_RUN_URL = `https://api.apify.com/v2/acts/${APIFY_ACTOR}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&timeout=120`
+
+interface DramaBoxBook {
+  bookId: string
+  bookName: string
+  coverWap?: string
+  chapterCount?: number
+  introduction?: string
+  tags?: string[]
+  bookSource?: string
+  playCount?: number
+}
+
+interface DramaBoxHome {
+  ok: boolean
+  data?: {
+    language?: string
+    latest?: { columns?: Array<{ books?: DramaBoxBook[] }> }
+    trending?: { columns?: Array<{ books?: DramaBoxBook[] }> }
+    recommended?: { columns?: Array<{ books?: DramaBoxBook[] }> }
+  }
+}
+
+// In-memory cache (5 min TTL) so we don't call Apify on every request
+let dramaCache: ShortDrama[] | null = null
+let dramaCacheTime = 0
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 /**
- * Attempts to fetch from the Anichin API. Returns null if the API is
- * unreachable or returns an error (e.g. {"error":"forbidden"} for an
- * invalid trial key). When a valid key is provided via ANICHIN_API_KEY,
- * this will return real DramaBox / ReelShort / ShortMax content.
+ * Fetches real DramaBox data via the Apify `ezvidnet/short-drama-api` actor.
+ * Returns null if APIFY_TOKEN is not set or the actor fails.
+ *
+ * The actor calls the real DramaBox API (which is behind Cloudflare) and
+ * returns actual drama titles, covers, descriptions, tags, and episode
+ * counts. Video streams are NOT available (DRM-protected), so episodes
+ * use the open-source short films from HLS_STREAMS.
  */
-async function fetchFromAnichin<T>(path: string): Promise<T | null> {
+async function fetchDramaBoxFromApify(): Promise<ShortDrama[] | null> {
+  if (!APIFY_TOKEN) return null
+
+  // Check cache
+  if (dramaCache && Date.now() - dramaCacheTime < CACHE_TTL) {
+    return dramaCache
+  }
+
   try {
-    const res = await fetch(`${ANICHIN_BASE}${path}`, {
-      headers: { 'X-API-KEY': ANICHIN_KEY },
-      signal: AbortSignal.timeout(8000),
+    const res = await fetch(APIFY_RUN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'dramabox',
+        action: 'home',
+      }),
+      signal: AbortSignal.timeout(60000),
     })
+
     if (!res.ok) return null
-    const data = await res.json()
-    // The trial key returns { error: "forbidden" }
-    if (data && typeof data === 'object' && 'error' in data) return null
-    return data as T
+    const items = (await res.json()) as DramaBoxHome[]
+    if (!Array.isArray(items) || items.length === 0) return null
+
+    const home = items[0]
+    if (!home?.ok || !home.data) return null
+
+    // Collect dramas from all sections (trending, latest, recommended)
+    const allBooks = new Map<string, DramaBoxBook>()
+    for (const section of ['trending', 'latest', 'recommended'] as const) {
+      const sec = home.data[section]
+      if (!sec?.columns) continue
+      for (const col of sec.columns) {
+        if (!col.books) continue
+        for (const book of col.books) {
+          if (book.bookId && book.bookName && !allBooks.has(book.bookId)) {
+            allBooks.set(book.bookId, book)
+          }
+        }
+      }
+    }
+
+    if (allBooks.size === 0) return null
+
+    // Map to ShortDrama format
+    const gradients = [
+      'from-pink-500 via-rose-500 to-orange-400',
+      'from-violet-500 via-purple-500 to-fuchsia-500',
+      'from-blue-500 via-cyan-500 to-teal-500',
+      'from-amber-500 via-orange-500 to-red-500',
+      'from-emerald-500 via-green-500 to-teal-500',
+      'from-indigo-500 via-blue-500 to-cyan-500',
+      'from-red-500 via-rose-500 to-pink-500',
+      'from-yellow-500 via-amber-500 to-orange-500',
+    ]
+
+    let i = 0
+    const dramas: ShortDrama[] = []
+    for (const book of allBooks.values()) {
+      const tags = book.tags ?? []
+      const genre = tags[0] || 'Drama'
+      const id = `db-${book.bookId}`
+      const gradient = gradients[i % gradients.length]!
+      i++
+      dramas.push({
+        id,
+        title: book.bookName,
+        description: book.introduction ?? '',
+        emoji: '🎬',
+        genre,
+        rating: 8 + ((i * 7) % 20) / 10, // 8.0–9.9 (no real rating in API)
+        totalEpisodes: book.chapterCount ?? 0,
+        isNew: i <= 5, // first 5 marked as new
+        isTrending: true,
+        gradient,
+        streams: [], // filled on-demand by buildStreams()
+      })
+    }
+
+    dramaCache = dramas
+    dramaCacheTime = Date.now()
+    return dramas
   } catch {
     return null
   }
 }
 
-interface AnichinDrama {
-  id?: string | number
-  title?: string
-  name?: string
-  description?: string
-  synopsis?: string
-  cover?: string
-  image?: string
-  poster?: string
-  episodes?: number
-  totalEpisodes?: number
-  genre?: string
-  category?: string
-  rating?: number
-  score?: number
-  source?: string
-}
-
-function mapAnichinDrama(item: AnichinDrama): ShortDrama | null {
-  const id = item.id ? String(item.id) : null
-  const title = item.title || item.name
-  if (!id || !title) return null
-  return {
-    id,
-    title,
-    description: item.description || item.synopsis || '',
-    emoji: '🎬',
-    genre: item.genre || item.category || 'Drama',
-    rating: item.rating || item.score || 0,
-    totalEpisodes: item.episodes || item.totalEpisodes || 0,
-    isNew: false,
-    isTrending: true,
-    gradient: 'from-pink-500 via-rose-500 to-orange-400',
-    streams: [],
+/** Searches DramaBox via Apify. Falls back to local filter. */
+async function searchDramaBoxFromApify(query: string): Promise<ShortDrama[] | null> {
+  if (!APIFY_TOKEN) return null
+  try {
+    const res = await fetch(APIFY_RUN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'dramabox',
+        action: 'search',
+        keyword: query,
+        limit: 20,
+      }),
+      signal: AbortSignal.timeout(60000),
+    })
+    if (!res.ok) return null
+    const items = (await res.json()) as DramaBoxHome[]
+    if (!Array.isArray(items) || items.length === 0) return null
+    // Parse search results the same way as home
+    // ... (same mapping logic)
+    return null // fallback to local for now
+  } catch {
+    return null
   }
 }
 
@@ -547,15 +636,13 @@ function mapAnichinDrama(item: AnichinDrama): ShortDrama | null {
 // ─────────────────────────────────────────────────────────────────────
 
 /**
- * Trending dramas. Tries the Anichin API first (if a valid key is set),
+ * Trending dramas. Tries the Apify DramaBox API first (real data),
  * then falls back to the curated catalog.
  */
 export async function getTrendingDramas(limit?: number): Promise<ShortDrama[]> {
-  // Try Anichin API first
-  const api = await fetchFromAnichin<{ results?: AnichinDrama[] }>('dramabox/trending')
-  if (api?.results && api.results.length > 0) {
-    const mapped = api.results.map(mapAnichinDrama).filter((d): d is ShortDrama => d !== null)
-    if (mapped.length > 0) return limit ? mapped.slice(0, limit) : mapped
+  const apiDramas = await fetchDramaBoxFromApify()
+  if (apiDramas && apiDramas.length > 0) {
+    return limit ? apiDramas.slice(0, limit) : apiDramas
   }
   // Fall back to curated catalog
   const trending = DRAMAS.filter((d) => d.isTrending).sort((a, b) => b.rating - a.rating)
@@ -564,6 +651,12 @@ export async function getTrendingDramas(limit?: number): Promise<ShortDrama[]> {
 
 /** New dramas. Falls back to curated catalog. */
 export async function getNewDramas(limit?: number): Promise<ShortDrama[]> {
+  const apiDramas = await fetchDramaBoxFromApify()
+  if (apiDramas && apiDramas.length > 0) {
+    const fresh = apiDramas.filter((d) => d.isNew)
+    if (fresh.length > 0) return limit ? fresh.slice(0, limit) : fresh
+  }
+  // Fall back to curated catalog
   const fresh = DRAMAS.filter((d) => d.isNew).sort((a, b) => {
     if (b.year !== a.year) return b.year - a.year
     return b.rating - a.rating
@@ -573,11 +666,9 @@ export async function getNewDramas(limit?: number): Promise<ShortDrama[]> {
 
 /** Full catalog. Falls back to curated catalog. */
 export async function getAllDramas(): Promise<ShortDrama[]> {
-  // Try Anichin API first
-  const api = await fetchFromAnichin<{ results?: AnichinDrama[] }>('dramabox/trending?page=1')
-  if (api?.results && api.results.length > 0) {
-    const mapped = api.results.map(mapAnichinDrama).filter((d): d is ShortDrama => d !== null)
-    if (mapped.length > 0) return mapped
+  const apiDramas = await fetchDramaBoxFromApify()
+  if (apiDramas && apiDramas.length > 0) {
+    return apiDramas
   }
   return DRAMAS.map(stripDetail)
 }
@@ -586,6 +677,10 @@ export async function getAllDramas(): Promise<ShortDrama[]> {
 export async function getDramasByGenre(genre: string): Promise<ShortDrama[]> {
   const g = genre.trim().toLowerCase()
   if (!g || g === 'all') return getAllDramas()
+  const apiDramas = await fetchDramaBoxFromApify()
+  if (apiDramas && apiDramas.length > 0) {
+    return apiDramas.filter((d) => d.genre.toLowerCase() === g)
+  }
   return DRAMAS.filter((d) => d.genre.toLowerCase() === g).map(stripDetail)
 }
 
@@ -593,11 +688,16 @@ export async function getDramasByGenre(genre: string): Promise<ShortDrama[]> {
 export async function searchDramas(query: string): Promise<ShortDrama[]> {
   const q = query.trim().toLowerCase()
   if (!q) return getAllDramas()
-  // Try Anichin API search first
-  const api = await fetchFromAnichin<{ results?: AnichinDrama[] }>(`dramabox/search?query=${encodeURIComponent(query)}`)
-  if (api?.results && api.results.length > 0) {
-    const mapped = api.results.map(mapAnichinDrama).filter((d): d is ShortDrama => d !== null)
-    if (mapped.length > 0) return mapped
+  // Search the Apify-fetched catalog (cached)
+  const apiDramas = await fetchDramaBoxFromApify()
+  if (apiDramas && apiDramas.length > 0) {
+    return apiDramas.filter((d) => {
+      return (
+        d.title.toLowerCase().includes(q) ||
+        d.description.toLowerCase().includes(q) ||
+        d.genre.toLowerCase().includes(q)
+      )
+    })
   }
   // Fall back to local search
   return DRAMAS.filter((d) => {
@@ -612,21 +712,40 @@ export async function searchDramas(query: string): Promise<ShortDrama[]> {
 }
 
 /** Full detail for a single drama, or null if id is unknown. */
-export function getDramaDetails(id: string): ShortDramaDetail | null {
+export async function getDramaDetails(id: string): Promise<ShortDramaDetail | null> {
+  // Check Apify-fetched dramas first (db- prefix)
+  if (id.startsWith('db-')) {
+    const apiDramas = await fetchDramaBoxFromApify()
+    if (apiDramas) {
+      const drama = apiDramas.find((d) => d.id === id)
+      if (drama) {
+        // Build a ShortDramaDetail from the Apify drama
+        return {
+          ...drama,
+          synopsis: drama.description,
+          cast: [],
+          year: 2024,
+          streams: buildStreams(drama.totalEpisodes || 10),
+        }
+      }
+    }
+  }
+  // Fall back to curated catalog
   return DRAMAS.find((d) => d.id === id) ?? null
 }
 
-/** Episodes for a drama (alias kept for API symmetry). */
-export function getDramaEpisodes(id: string): ShortDramaEpisode[] {
-  return getDramaDetails(id)?.streams ?? []
+/** Episodes for a drama. */
+export async function getDramaEpisodes(id: string): Promise<ShortDramaEpisode[]> {
+  const drama = await getDramaDetails(id)
+  return drama?.streams ?? []
 }
 
-/** Resolve a single episode’s stream URL. Returns null if not found. */
-export function getEpisodeStream(
+/** Resolve a single episode's stream URL. Returns null if not found. */
+export async function getEpisodeStream(
   id: string,
   episodeNumber: number,
-): { streamUrl: string; episode: ShortDramaEpisode; drama: ShortDramaDetail } | null {
-  const drama = getDramaDetails(id)
+): Promise<{ streamUrl: string; episode: ShortDramaEpisode; drama: ShortDramaDetail } | null> {
+  const drama = await getDramaDetails(id)
   if (!drama) return null
   const episode = drama.streams.find((e) => e.episodeNumber === episodeNumber)
   if (!episode) return null
@@ -634,15 +753,21 @@ export function getEpisodeStream(
 }
 
 /** Distinct genre list, sorted alphabetically. */
-export function getAvailableGenres(): string[] {
+export async function getAvailableGenres(): Promise<string[]> {
+  const apiDramas = await fetchDramaBoxFromApify()
   const set = new Set<string>()
-  for (const d of DRAMAS) set.add(d.genre)
+  if (apiDramas && apiDramas.length > 0) {
+    for (const d of apiDramas) set.add(d.genre)
+  } else {
+    for (const d of DRAMAS) set.add(d.genre)
+  }
   return Array.from(set).sort()
 }
 
-/** Look up a drama’s gradient by id (used by the player overlay header). */
-export function getDramaGradient(id: string): string | null {
-  return getDramaDetails(id)?.gradient ?? null
+/** Look up a drama's gradient by id (used by the player overlay header). */
+export async function getDramaGradient(id: string): Promise<string | null> {
+  const drama = await getDramaDetails(id)
+  return drama?.gradient ?? null
 }
 
 // ─────────────────────────────────────────────────────────────────────
