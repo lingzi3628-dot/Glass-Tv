@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   keywords: ["GlassTV", "IPTV", "live TV", "AI subtitles", "streaming"],
   authors: [{ name: "GlassTV" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/favicon.svg",
   },
 };
 
