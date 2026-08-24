@@ -65,32 +65,29 @@ export interface ShortDramaDetail extends ShortDrama {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Real short-film video sources (Google open-source movies + HLS streams)
-// These are DIFFERENT from the IPTV channel test streams so dramas don't
-// look like channels. Each is a real short film (2-15 min).
+// Real HLS streams (different from IPTV channel test streams)
+// These are publicly-available HLS test streams that work with hls.js.
+// They are DIFFERENT from the IPTV channel streams (which use x36xhzz,
+// test_001, and pts_shift) so dramas don't look like channels.
 // ─────────────────────────────────────────────────────────────────────
 
 const HLS_STREAMS = [
-  // Google's open-source short films (actual stories, not test patterns)
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TheDigitalRevolution.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4',
+  // Mux Tears of Steel (different URL from IPTV's test_001)
+  'https://test-streams.mux.dev/tos_ismc/main.m3u8',
+  // Apple bipbop streams (different from IPTV)
+  'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8',
+  'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8',
+  'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8',
+  // Mux DAI discontinuity test
+  'https://test-streams.mux.dev/dai-discontinuity-deltatre/manifest.m3u8',
+  // Akamai live test stream
+  'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
 ] as const
 
 /**
- * Build a stream list for a drama by rotating through the 12 real short-film
- * URLs. Each episode gets its own video URL. These are real short films
- * (Big Buck Bunny, Sintel, Tears of Steel, etc.) — completely different
- * content from the IPTV channel streams, so dramas don't look like channels.
+ * Build a stream list for a drama by rotating through 6 real HLS streams.
+ * Each episode gets its own stream URL. These are DIFFERENT from the IPTV
+ * channel test streams so dramas don't look like channels.
  */
 function buildStreams(totalEpisodes: number, titles?: string[]): ShortDramaEpisode[] {
   const episodes: ShortDramaEpisode[] = []

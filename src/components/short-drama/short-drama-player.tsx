@@ -198,10 +198,9 @@ export function ShortDramaPlayer() {
     }
   }
 
-  // ── HLS attach / detach ────────────────────────────────────────────
+  // ── Video source attach / detach ──────────────────────────────────
   // Capture the video element as `v` (non-null) before any closure
-  // touches it so TypeScript can prove attachMedia() receives an
-  // HTMLVideoElement, not HTMLVideoElement | null.
+  // touches it so TypeScript can prove it receives an HTMLVideoElement.
   React.useEffect(() => {
     if (!player) return
     const video = videoRef.current
@@ -215,42 +214,46 @@ export function ShortDramaPlayer() {
     setCurrentTime(0)
     setDuration(0)
 
-    // Native HLS path (Safari + iOS).
-    if (!Hls.isSupported()) {
-      if (v.canPlayType('application/vnd.apple.mpegurl') || streamUrl.endsWith('.mp4')) {
-        v.src = streamUrl
-        v.muted = isMuted
-        const onLoaded = () => {
-          if (disposed) return
-          setIsLoading(false)
-          setDuration(Number.isFinite(v.duration) ? v.duration : 0)
-          const p = v.play()
-          if (p && typeof p.then === 'function') {
-            p.then(() => setIsPlaying(true)).catch(() => setIsPlaying(false))
-          }
-        }
-        const onErr = () => {
-          if (disposed) return
-          setError('Unable to load this episode on your device.')
-          setIsLoading(false)
-        }
-        v.addEventListener('loadedmetadata', onLoaded)
-        v.addEventListener('error', onErr)
-        return () => {
-          disposed = true
-          v.removeEventListener('loadedmetadata', onLoaded)
-          v.removeEventListener('error', onErr)
-          v.pause()
-          v.removeAttribute('src')
-          v.load()
+    // ── .mp4 files: use native <video> playback (NOT hls.js) ──────
+    // hls.js only works with .m3u8 HLS manifests. Feeding it a .mp4 URL
+    // causes manifestLoadError. For .mp4 we set video.src directly.
+    const isMp4 = streamUrl.endsWith('.mp4') || streamUrl.includes('.mp4?')
+
+    if (isMp4 || !Hls.isSupported()) {
+      v.src = streamUrl
+      v.muted = isMuted
+
+      const onLoaded = () => {
+        if (disposed) return
+        setIsLoading(false)
+        setDuration(Number.isFinite(v.duration) ? v.duration : 0)
+        const p = v.play()
+        if (p && typeof p.then === 'function') {
+          p.then(() => setIsPlaying(true)).catch(() => setIsPlaying(false))
         }
       }
-      setError('Your browser does not support HLS playback.')
-      setIsLoading(false)
-      return
+      const onErr = () => {
+        if (disposed) return
+        setError('Unable to load this video. Try another episode.')
+        setIsLoading(false)
+      }
+      v.addEventListener('loadedmetadata', onLoaded)
+      v.addEventListener('error', onErr)
+
+      // Kick off loading
+      v.load()
+
+      return () => {
+        disposed = true
+        v.removeEventListener('loadedmetadata', onLoaded)
+        v.removeEventListener('error', onErr)
+        v.pause()
+        v.removeAttribute('src')
+        v.load()
+      }
     }
 
-    // Standard path: hls.js.
+    // ── .m3u8 HLS streams: use hls.js ─────────────────────────────
     const hls = new Hls({
       enableWorker: true,
       lowLatencyMode: true,
