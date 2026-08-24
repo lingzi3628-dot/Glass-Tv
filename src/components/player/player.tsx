@@ -8,7 +8,6 @@ import {
   ArrowLeft,
   Captions,
   Heart,
-  Loader2,
   Play,
   RefreshCw,
   X,
@@ -667,9 +666,24 @@ export function Player({ channel, onBack }: PlayerProps) {
 
       {/* Loading state */}
       {showLoading ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white pointer-events-none">
-          <Loader2 className="h-12 w-12 animate-spin" aria-hidden />
-          <span className="text-sm text-white/80">Loading stream…</span>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-white pointer-events-none">
+          <div className="player-glass-loading flex flex-col items-center gap-4 px-8 py-7">
+            <div className="relative h-16 w-16 flex items-center justify-center">
+              {/* Rotating brand-gradient ring (conic gradient masked
+                  into a thin arc). Spins at 1.2s/rev via the
+                  .animate-player-ring utility. */}
+              <div className="absolute inset-0 rounded-full player-loading-ring animate-player-ring" />
+              {/* Inner glass circle with the GlassTV "G" logo badge. */}
+              <div className="player-watermark-logo h-9 w-9 rounded-xl flex items-center justify-center">
+                <span className="text-base font-bold text-primary-foreground">
+                  G
+                </span>
+              </div>
+            </div>
+            <span className="text-sm text-white/80 animate-fade-in">
+              Loading stream…
+            </span>
+          </div>
         </div>
       ) : null}
 
@@ -685,7 +699,7 @@ export function Player({ channel, onBack }: PlayerProps) {
             <button
               type="button"
               onClick={handleRetry}
-              className="player-focusable inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors focus-ring min-h-[44px]"
+              className="player-focusable player-glow-btn inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium focus-ring min-h-[44px]"
             >
               <RefreshCw className="h-4 w-4" />
               Retry
@@ -693,7 +707,7 @@ export function Player({ channel, onBack }: PlayerProps) {
             <button
               type="button"
               onClick={handleClose}
-              className="player-focusable px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors focus-ring min-h-[44px]"
+              className="player-focusable player-glow-btn px-4 py-2 rounded-lg text-white text-sm font-medium focus-ring min-h-[44px]"
             >
               Go back
             </button>
@@ -704,8 +718,8 @@ export function Player({ channel, onBack }: PlayerProps) {
       {/* Buffering spinner overlay (non-blocking) */}
       {showBuffering ? (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <Loader2
-            className="h-10 w-10 animate-spin text-white/80"
+          <div
+            className="h-10 w-10 rounded-full player-loading-ring animate-player-ring"
             aria-hidden
           />
         </div>
@@ -730,13 +744,13 @@ export function Player({ channel, onBack }: PlayerProps) {
 
       {/* Top bar */}
       {controlsVisible && !showError ? (
-        <div className="absolute top-0 left-0 right-0 z-20 flex items-start justify-between gap-3 p-3 sm:p-4 bg-gradient-to-b from-black/80 to-transparent">
+        <div className="absolute top-0 left-0 right-0 z-20 flex items-start justify-between gap-3 p-3 sm:p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent animate-fade-in-controls">
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
               aria-label="Back"
               onClick={handleClose}
-              className="player-focusable p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="player-focusable player-glow-btn p-2 rounded-full text-white focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
@@ -769,7 +783,7 @@ export function Player({ channel, onBack }: PlayerProps) {
               }
               aria-pressed={favorited}
               onClick={() => toggleFavorite(channel.id)}
-              className="player-focusable p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="player-focusable player-glow-btn p-2 rounded-full text-white focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
               <Heart
                 className={cn(
@@ -790,7 +804,7 @@ export function Player({ channel, onBack }: PlayerProps) {
               onClick={() =>
                 updateCaptionSettings({ enabled: !captionSettings.enabled })
               }
-              className="player-focusable p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="player-focusable player-glow-btn p-2 rounded-full text-white focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
               <Captions
                 className={cn(
@@ -805,7 +819,7 @@ export function Player({ channel, onBack }: PlayerProps) {
               type="button"
               aria-label="Close player"
               onClick={handleClose}
-              className="player-focusable p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="player-focusable player-glow-btn p-2 rounded-full text-white focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
               <X className="h-5 w-5" />
             </button>
@@ -819,7 +833,7 @@ export function Player({ channel, onBack }: PlayerProps) {
           type="button"
           aria-label="Play"
           onClick={togglePlay}
-          className="player-focusable absolute inset-0 m-auto h-16 w-16 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm flex items-center justify-center focus-ring transition-colors z-10"
+          className="player-focusable player-glow-btn-primary absolute inset-0 m-auto h-16 w-16 rounded-full text-white flex items-center justify-center focus-ring z-10"
         >
           <Play className="h-8 w-8 text-white fill-white ml-1" />
         </button>

@@ -220,6 +220,115 @@
   .scrollbar-premium::-webkit-scrollbar-thumb:hover {
     background: oklch(0.75 0.05 285);
   }
+
+  /* Phase 18 - Player premium glassmorphism
+     ------------------------------------------------------------------
+     A cohesive set of glass surfaces and accent controls used across
+     the Player (controls bar, settings modal, loading state, gesture
+     indicators, buttons, seek bar dot, watermark logo, loading ring).
+     All surfaces use rgba black + backdrop blur + saturate boost so
+     they layer cleanly over a playing video without obscuring it. */
+
+  /* Bottom controls bar — dark, semi-opaque, top-edge hairline border
+     and an upward soft shadow so the bar "lifts" off the video. */
+  .player-glass-controls {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  /* Floating panels (settings modal, quality dropdown, stats overlay) —
+     heavier blur + rounded-3xl + deep shadow. */
+  .player-glass-panel {
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  }
+
+  /* Gesture indicator pill (swipe volume/brightness/seek HUD). */
+  .player-glass-gesture {
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Loading state container — almost-opaque so the rotating ring
+     reads as a deliberate focal point. */
+  .player-glass-loading {
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  /* Standard player button — subtle frosted surface that brightens
+     + glows brand-violet on hover, presses in on :active. */
+  .player-glow-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+  }
+  .player-glow-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 30px oklch(0.45 0.18 285 / 0.2);
+  }
+  .player-glow-btn:active {
+    transform: scale(0.92);
+  }
+
+  /* Primary player button (Play/Pause, center Play) — brand gradient
+     fill with a strong glow that intensifies on hover. */
+  .player-glow-btn-primary {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    box-shadow: 0 4px 14px oklch(0.45 0.18 285 / 0.4);
+    transition: box-shadow 0.2s ease, transform 0.1s ease;
+  }
+  .player-glow-btn-primary:hover {
+    box-shadow: 0 0 30px oklch(0.45 0.18 285 / 0.6);
+  }
+  .player-glow-btn-primary:active {
+    transform: scale(0.92);
+  }
+
+  /* Seek bar dot — soft violet halo + tight white inner ring. */
+  .player-seek-dot {
+    box-shadow:
+      0 0 20px oklch(0.45 0.18 285 / 0.6),
+      0 0 8px rgba(255, 255, 255, 0.3);
+  }
+
+  /* Watermark logo badge — small gradient square with brand glow. */
+  .player-watermark-logo {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    box-shadow: 0 2px 12px oklch(0.45 0.18 285 / 0.3);
+  }
+
+  /* Loading ring — a conic gradient masked into a thin ring so it
+     reads as a spinning brand-colored arc. Pair with
+     .animate-player-ring for rotation. */
+  .player-loading-ring {
+    background: conic-gradient(
+      from 0deg,
+      transparent 0%,
+      var(--primary) 40%,
+      var(--secondary) 60%,
+      transparent 100%
+    );
+    -webkit-mask: radial-gradient(
+      transparent calc(50% - 3px),
+      #000 calc(50% - 2px)
+    );
+    mask: radial-gradient(transparent calc(50% - 3px), #000 calc(50% - 2px));
+  }
 }
 
 @layer utilities {
@@ -252,5 +361,199 @@
   }
   .animate-pulse-slow {
     animation: glasstv-pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Phase 17c - micro-interaction & motion utilities */
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.18) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+
+  @keyframes glassPulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 oklch(0.45 0.18 285 / 0);
+    }
+    50% {
+      box-shadow: 0 0 0 6px oklch(0.45 0.18 285 / 0.18);
+    }
+  }
+  .glass-pulse {
+    animation: glassPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes glowPulse {
+    0%, 100% {
+      box-shadow: 0 0 12px 0 oklch(0.45 0.18 285 / 0.1);
+    }
+    50% {
+      box-shadow: 0 0 28px 4px oklch(0.45 0.18 285 / 0.1);
+    }
+  }
+  .glow-pulse {
+    animation: glowPulse 2.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.92);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  .animate-scale-in {
+    animation: scaleIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(28px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  .animate-slide-in-right {
+    animation: slideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  @keyframes slideInUp {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-slide-in-up {
+    animation: slideInUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  /* Staggered animation-delay helpers (1..10) */
+  .stagger-1 { animation-delay: 0.08s; }
+  .stagger-2 { animation-delay: 0.16s; }
+  .stagger-3 { animation-delay: 0.24s; }
+  .stagger-4 { animation-delay: 0.32s; }
+  .stagger-5 { animation-delay: 0.40s; }
+  .stagger-6 { animation-delay: 0.48s; }
+  .stagger-7 { animation-delay: 0.56s; }
+  .stagger-8 { animation-delay: 0.64s; }
+  .stagger-9 { animation-delay: 0.72s; }
+  .stagger-10 { animation-delay: 0.80s; }
+
+  /* Phase 18 - Player glassmorphism motion utilities
+     ------------------------------------------------------------------
+     One-shot fades for the controls bar / top bar (in + out) plus
+     decorative infinite pulses/spins/shimmers for the loading ring,
+     primary CTA glow, and surface shimmer. */
+
+  @keyframes fadeInControls {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-fade-in-controls {
+    animation: fadeInControls 0.3s ease-out forwards;
+  }
+
+  @keyframes fadeOutControls {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+  }
+  .animate-fade-out-controls {
+    animation: fadeOutControls 0.3s ease-in forwards;
+  }
+
+  @keyframes playerGlowPulse {
+    0%, 100% {
+      box-shadow: 0 0 20px oklch(0.45 0.18 285 / 0.3);
+    }
+    50% {
+      box-shadow: 0 0 40px oklch(0.45 0.18 285 / 0.6);
+    }
+  }
+  .player-glow-pulse {
+    animation: playerGlowPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes glassShimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+  .animate-glass-shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.08) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: glassShimmer 2.4s linear infinite;
+  }
+
+  @keyframes playerRingSpin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .animate-player-ring {
+    animation: playerRingSpin 1.2s linear infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Disable all decorative animations under reduced-motion. Essential
+     transitions (opacity for state changes) are kept; the purely
+     decorative infinite pulses/shimmers are paused. */
+  .animate-slide-up,
+  .animate-fade-in,
+  .animate-pulse-slow,
+  .shimmer,
+  .glass-pulse,
+  .glow-pulse,
+  .animate-scale-in,
+  .animate-slide-in-right,
+  .animate-slide-in-up,
+  .animate-fade-in-controls,
+  .animate-fade-out-controls,
+  .player-glow-pulse,
+  .animate-glass-shimmer,
+  .animate-player-ring {
+    animation: none !important;
   }
 }

@@ -1,13 +1,14 @@
 // GlassTV - Prisma schema
-// Adapted from the original Drizzle/Neon spec to Prisma + SQLite.
+// Neon Postgres (pooled for runtime, unpooled for migrations).
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 // Users - managed via our lightweight cookie-based session (next-auth v4 is available
@@ -25,6 +26,8 @@ model User {
   favorites     Favorite[]
   history       WatchHistory[]
   captionSetting CaptionSetting?
+  shortDramaHistory   ShortDramaHistory[]
+  shortDramaFavorites ShortDramaFavorite[]
 }
 
 // User Preferences - collected during the AI onboarding flow.
@@ -112,4 +115,76 @@ model CaptionSetting {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ═══════════════════════════════════════════════════════════
+// Short Dramas — vertical mini-series (ReelShort / DramaBox style)
+// ═══════════════════════════════════════════════════════════
+
+model ShortDrama {
+  id            Int      @id @default(autoincrement())
+  externalId    String   @unique
+  title         String
+  description   String?
+  cover         String?
+  poster        String?
+  source        String   @default("dramabox")
+  totalEpisodes Int      @default(0)
+  genre         String?
+  rating        Float?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  episodes  ShortDramaEpisode[]
+  history   ShortDramaHistory[]
+  favorites ShortDramaFavorite[]
+
+  @@index([source])
+  @@index([genre])
+}
+
+model ShortDramaEpisode {
+  id            Int      @id @default(autoincrement())
+  dramaId       Int
+  externalId    String
+  episodeNumber Int
+  title         String?
+  streamUrl     String
+  duration      Int?
+  thumbnail     String?
+  createdAt     DateTime @default(now())
+
+  drama   ShortDrama @relation(fields: [dramaId], references: [id], onDelete: Cascade)
+  history ShortDramaHistory[]
+
+  @@unique([dramaId, episodeNumber])
+  @@index([dramaId])
+}
+
+model ShortDramaHistory {
+  id         Int      @id @default(autoincrement())
+  userId     String
+  episodeId  Int
+  dramaId    Int
+  watchedAt  DateTime @default(now())
+  progress   Int      @default(0)
+  completed  Boolean  @default(false)
+
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episode ShortDramaEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  drama   ShortDrama       @relation(fields: [dramaId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, dramaId])
+}
+
+model ShortDramaFavorite {
+  userId   String
+  dramaId  Int
+  addedAt  DateTime @default(now())
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  drama ShortDrama @relation(fields: [dramaId], references: [id], onDelete: Cascade)
+
+  @@id([userId, dramaId])
 }

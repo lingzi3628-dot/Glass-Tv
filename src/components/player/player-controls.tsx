@@ -184,11 +184,18 @@ export function PlayerControls(props: PlayerControlsProps) {
 
   if (!visible) return null
 
+  // Standard frosted player button (mute, PiP, fullscreen, settings,
+  // playback rate, quality selector). The `player-glow-btn` utility
+  // (defined in globals.css @layer components) supplies the rgba
+  // background, hairline border, hover glow, and :active scale.
   const btnBase =
-    'player-focusable p-2 sm:p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center'
+    'player-focusable player-glow-btn p-2 sm:p-2.5 rounded-full text-white focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center'
+  // Primary CTA (Play/Pause) uses the brand gradient + stronger glow.
+  const btnPrimary =
+    'player-focusable player-glow-btn-primary p-2 sm:p-2.5 rounded-full text-white focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center'
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 z-20 px-3 sm:px-6 pb-3 sm:pb-5 pt-12 bg-gradient-to-t from-black/90 via-black/40 to-transparent">
+    <div className="absolute bottom-0 left-0 right-0 z-20 px-3 sm:px-6 pb-3 sm:pb-5 pt-12 player-glass-controls animate-fade-in-controls">
       {/* Seek bar / LIVE badge */}
       <div className="mb-2 flex items-center gap-3">
         {live ? (
@@ -204,7 +211,7 @@ export function PlayerControls(props: PlayerControlsProps) {
         ) : (
           <div
             ref={seekBarRef}
-            className="group relative flex-1 h-3 flex items-center cursor-pointer touch-none"
+            className="group relative flex-1 h-4 flex items-center cursor-pointer touch-none"
             onClick={handleSeekBarClick}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -217,13 +224,19 @@ export function PlayerControls(props: PlayerControlsProps) {
             aria-valuenow={Math.floor(currentTime)}
             tabIndex={-1}
           >
-            <div className="relative w-full h-1.5 bg-white/25 rounded-full">
+            <div className="relative w-full h-1.5 group-hover:h-2 transition-all rounded-full bg-white/25">
+              {/* Buffered hint fill — a soft white slab behind the
+                  progress gradient so the user sees what's loaded. */}
+              <div
+                className="absolute inset-y-0 left-0 bg-white/10 rounded-full"
+                style={{ width: `${Math.min(100, progress + 8)}%` }}
+              />
               <div
                 className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary to-secondary rounded-full"
                 style={{ width: `${progress}%` }}
               />
               <div
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3 w-3 rounded-full bg-white shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3.5 w-3.5 rounded-full bg-white player-seek-dot opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all"
                 style={{ left: `${progress}%` }}
               />
             </div>
@@ -240,7 +253,7 @@ export function PlayerControls(props: PlayerControlsProps) {
             aria-label={isPlaying ? 'Pause' : 'Play'}
             aria-pressed={isPlaying}
             onClick={onTogglePlay}
-            className={btnBase}
+            className={btnPrimary}
           >
             {isPlaying ? (
               <Pause className="h-5 w-5" />
@@ -271,7 +284,7 @@ export function PlayerControls(props: PlayerControlsProps) {
             aria-label="Volume"
             className="player-focusable hidden sm:block w-24 h-1.5 cursor-pointer"
             style={{
-              background: `linear-gradient(to right, white 0%, white ${
+              background: `linear-gradient(to right, var(--primary) 0%, var(--secondary) ${
                 effectiveVolume * 100
               }%, rgba(255,255,255,0.3) ${
                 effectiveVolume * 100
@@ -311,7 +324,7 @@ export function PlayerControls(props: PlayerControlsProps) {
                 PLAYBACK_RATES[(idx + 1) % PLAYBACK_RATES.length]
               onSetPlaybackRate(next)
             }}
-            className="player-focusable px-2.5 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-medium transition-colors focus-ring min-h-[44px] min-w-[44px]"
+            className="player-focusable player-glow-btn px-2.5 py-2 rounded-full text-white text-xs sm:text-sm font-medium focus-ring min-h-[44px] min-w-[44px]"
           >
             {playbackRate}&times;
           </button>
@@ -324,13 +337,13 @@ export function PlayerControls(props: PlayerControlsProps) {
               aria-expanded={showQualitySelector}
               aria-pressed={showQualitySelector}
               onClick={onToggleQualitySelector}
-              className="player-focusable px-2.5 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-medium transition-colors focus-ring flex items-center gap-1 min-h-[44px]"
+              className="player-focusable player-glow-btn px-2.5 py-2 rounded-full text-white text-xs sm:text-sm font-medium focus-ring flex items-center gap-1 min-h-[44px]"
             >
               <span>{qualityButtonLabel}</span>
               <ChevronUp className="h-3.5 w-3.5" />
             </button>
             {showQualitySelector ? (
-              <div className="absolute bottom-full mb-2 right-0 glass-dark rounded-xl p-1 min-w-[200px] max-h-72 overflow-y-auto scrollbar-premium animate-fade-in">
+              <div className="absolute bottom-full mb-2 right-0 player-glass-panel p-1 min-w-[200px] max-h-72 overflow-y-auto scrollbar-premium animate-fade-in">
                 <button
                   type="button"
                   aria-pressed={currentLevel === -1}
@@ -339,10 +352,10 @@ export function PlayerControls(props: PlayerControlsProps) {
                     onToggleQualitySelector()
                   }}
                   className={cn(
-                    'player-focusable w-full text-left px-3 py-2 text-sm rounded-lg transition-colors focus-ring whitespace-nowrap min-h-[40px]',
+                    'player-focusable w-full text-left px-4 py-3 text-sm rounded-xl transition-colors focus-ring whitespace-nowrap min-h-[40px]',
                     currentLevel === -1
-                      ? 'bg-primary/30 text-primary font-medium'
-                      : 'text-white/80 hover:bg-white/10',
+                      ? 'bg-primary/20 border border-primary/30 text-primary font-medium'
+                      : 'text-white/80 hover:bg-white/5',
                   )}
                 >
                   Auto
@@ -359,10 +372,10 @@ export function PlayerControls(props: PlayerControlsProps) {
                         onToggleQualitySelector()
                       }}
                       className={cn(
-                        'player-focusable w-full text-left px-3 py-2 text-sm rounded-lg transition-colors focus-ring whitespace-nowrap min-h-[40px]',
+                        'player-focusable w-full text-left px-4 py-3 text-sm rounded-xl transition-colors focus-ring whitespace-nowrap min-h-[40px]',
                         active
-                          ? 'bg-primary/30 text-primary font-medium'
-                          : 'text-white/80 hover:bg-white/10',
+                          ? 'bg-primary/20 border border-primary/30 text-primary font-medium'
+                          : 'text-white/80 hover:bg-white/5',
                       )}
                     >
                       {level.label} &middot; {Math.round(level.bitrate / 1000)}{' '}
@@ -371,7 +384,7 @@ export function PlayerControls(props: PlayerControlsProps) {
                   )
                 })}
                 {availableLevels.length === 0 ? (
-                  <p className="text-xs text-white/50 px-3 py-2">
+                  <p className="text-xs text-white/50 px-4 py-3">
                     No alternate levels.
                   </p>
                 ) : null}

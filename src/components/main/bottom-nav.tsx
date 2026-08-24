@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Compass, Heart, Home, User } from 'lucide-react'
+import { Compass, Heart, Home, Smartphone, User } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { useAppStore, type AppTab } from '@/lib/store/app-store'
@@ -15,6 +15,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'guide', label: 'Guide', icon: Compass },
+  { id: 'short-drama', label: 'Dramas', icon: Smartphone },
   { id: 'favorites', label: 'Favorites', icon: Heart },
   { id: 'profile', label: 'Profile', icon: User },
 ]

@@ -16,7 +16,8 @@ import type { QualityLevel } from '@/lib/store/player-store'
  * (3-col grid of [0.5, 0.75, 1, 1.25, 1.5, 2]), and volume (mute button +
  * range slider + percentage).
  *
- * Uses the `glass-dark` utility for the modal card.
+ * Uses the `player-glass-panel` utility (Phase 18 premium glassmorphism)
+ * for the modal card.
  */
 export interface PlayerSettingsProps {
   visible: boolean
@@ -95,7 +96,7 @@ export function PlayerSettings({
       aria-label="Player settings"
     >
       <motion.div
-        className="glass-dark rounded-2xl p-5 sm:p-6 w-full max-w-md text-white max-h-[90vh] overflow-y-auto scrollbar-premium"
+        className="player-glass-panel p-5 sm:p-6 w-full max-w-md text-white max-h-[90vh] overflow-y-auto scrollbar-premium"
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -108,7 +109,7 @@ export function PlayerSettings({
             type="button"
             aria-label="Close settings"
             onClick={onClose}
-            className="player-focusable p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors focus-ring"
+            className="player-focusable player-glow-btn p-2 rounded-full text-white focus-ring"
           >
             <X className="h-4 w-4" />
           </button>
@@ -126,10 +127,10 @@ export function PlayerSettings({
               aria-pressed={currentLevel === -1}
               onClick={() => onSetQuality(-1)}
               className={cn(
-                'player-focusable w-full text-left px-3 py-2 text-sm rounded-lg transition-colors focus-ring',
+                'player-focusable w-full text-left px-4 py-3 text-sm rounded-xl transition-colors focus-ring',
                 currentLevel === -1
-                  ? 'bg-primary/30 text-primary font-medium'
-                  : 'text-white/80 hover:bg-white/10',
+                  ? 'bg-primary/20 border border-primary/30 text-primary font-medium'
+                  : 'text-white/80 hover:bg-white/5',
               )}
             >
               Auto
@@ -144,10 +145,10 @@ export function PlayerSettings({
                   aria-pressed={active}
                   onClick={() => onSetQuality(level.index)}
                   className={cn(
-                    'player-focusable w-full text-left px-3 py-2 text-sm rounded-lg transition-colors focus-ring flex items-center justify-between gap-3',
+                    'player-focusable w-full text-left px-4 py-3 text-sm rounded-xl transition-colors focus-ring flex items-center justify-between gap-3',
                     active
-                      ? 'bg-primary/30 text-primary font-medium'
-                      : 'text-white/80 hover:bg-white/10',
+                      ? 'bg-primary/20 border border-primary/30 text-primary font-medium'
+                      : 'text-white/80 hover:bg-white/5',
                   )}
                 >
                   <span>{level.label}</span>
@@ -158,7 +159,7 @@ export function PlayerSettings({
               )
             })}
             {availableLevels.length === 0 ? (
-              <p className="text-xs text-white/50 px-3 py-2">
+              <p className="text-xs text-white/50 px-4 py-3">
                 Quality options will appear once the stream loads.
               </p>
             ) : null}
@@ -181,10 +182,10 @@ export function PlayerSettings({
                   aria-pressed={active}
                   onClick={() => onSetPlaybackRate(rate)}
                   className={cn(
-                    'player-focusable py-2 rounded-lg text-sm font-medium transition-colors focus-ring min-h-[40px]',
+                    'player-focusable py-2 rounded-xl text-sm font-medium focus-ring min-h-[40px]',
                     active
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-white/10 hover:bg-white/20 text-white',
+                      ? 'player-glow-btn-primary text-primary-foreground'
+                      : 'player-glow-btn text-white',
                   )}
                 >
                   {rate}&times;
@@ -210,7 +211,7 @@ export function PlayerSettings({
               aria-label={isMuted ? 'Unmute' : 'Mute'}
               aria-pressed={isMuted}
               onClick={onToggleMute}
-              className="player-focusable p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors focus-ring"
+              className="player-focusable player-glow-btn p-2 rounded-full text-white focus-ring"
             >
               {isMuted ? (
                 <VolumeX className="h-5 w-5" />
@@ -228,7 +229,7 @@ export function PlayerSettings({
               aria-label="Volume"
               className="player-focusable flex-1 h-2 cursor-pointer"
               style={{
-                background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${
+                background: `linear-gradient(to right, var(--primary) 0%, var(--secondary) ${
                   effectiveVolume * 100
                 }%, rgba(255,255,255,0.2) ${
                   effectiveVolume * 100

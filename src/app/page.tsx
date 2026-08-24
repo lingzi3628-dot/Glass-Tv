@@ -13,6 +13,7 @@ import { OnboardingFlow } from '@/components/auth/OnboardingFlow'
 import { AppShell } from '@/components/main/app-shell'
 import { PreviewPopup } from '@/components/popup/preview-popup'
 import { Player } from '@/components/player/player'
+import { PageTransition } from '@/components/animations/page-transition'
 import type { Channel } from '@/lib/types'
 
 /**
@@ -111,9 +112,23 @@ export default function Home() {
       )
   }
 
+  // Derive a transition key from the auth status + SPA view so the
+  // PageTransition swaps when the user moves between loading / landing /
+  // login / signup / onboarding / app.
+  const transitionKey =
+    status === 'loading'
+      ? 'loading'
+      : status === 'authenticated'
+        ? user?.onboardingCompleted
+          ? 'app'
+          : 'onboarding'
+        : view
+
   return (
     <>
-      {content}
+      <PageTransition id={transitionKey} duration={0.35}>
+        {content}
+      </PageTransition>
       <AutoPreviewTrigger />
       <PreviewPopupHost />
       <PlayerOverlayHost />

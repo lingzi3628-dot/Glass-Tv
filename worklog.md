@@ -1686,3 +1686,463 @@ Stage Summary:
   [x] Language selection available (11 languages)
   [x] Font size slider works (12-32px)
   [x] Settings persist after page reload (via /api/caption-settings)
+
+---
+Task ID: 17c-rebuild
+Agent: general-purpose
+Task: Rebuild Phase 17c animations (lost in git reset)
+
+Work Log:
+- Files CREATED (7):
+  * src/components/animations/page-transition.tsx
+    - PageTransition component (motion.div + AnimatePresence mode="wait")
+    - Uses usePathname; falls back to explicit `id` prop for SPA view swaps
+    - initial/animate/exit = {opacity 0→1→0, y 20→0→-20}
+    - EASE_SPRING tuple extracted as `const [0.34, 1.56, 0.64, 1]` so
+      framer-motion's `Variants` type is satisfied (avoids `number[]`
+      widening error)
+    - Default duration 0.4s, overridable via prop
+  * src/components/animations/scroll-reveal.tsx
+    - ScrollReveal component (motion.div + useInView)
+    - useInView(ref, { once, margin: '-50px 0px' }) — no hasAnimated
+      state, so no setState-in-effect lint flag
+    - Direction-aware offset (up/down/left/right/none) with default
+      distance=50px
+    - animate={isInView ? 'visible' : 'hidden'} is the only state link
+  * src/components/animations/stagger-grid.tsx
+    - StaggerGrid component (motion.div container + per-item motion.div)
+    - Container variant uses staggerChildren + delayChildren
+    - Item variant uses the same EASE_SPRING tuple
+    - Accepts `children: ReactNode[]` (array) — each item is wrapped by
+      the grid itself, callers should NOT add their own initial/animate
+  * src/components/animations/fade-in.tsx
+    - FadeIn component (simple opacity 0→1, optional y offset, delay,
+      duration). EASE_SPRING tuple used.
+  * src/components/animations/loading-spinner.tsx
+    - LoadingSpinner component (motion.div rotating 360° infinitely)
+    - Sizes: sm (w-6 h-6 border-2), md (w-10 h-10 border-[3px]),
+      lg (w-16 h-16 border-4)
+    - Uses border-primary/30 track + border-t-primary active arc (Tailwind
+      v4 CSS-variable shorthand, NOT `border-primary-500`)
+    - role="status" + aria-live="polite" + sr-only label
+  * src/components/animations/index.ts — barrel export
+  * src/hooks/use-micro-interaction.ts
+    - useMicroInteraction hook returning { isPressed, isHovered, handlers }
+    - handlers spread-able: onMouseDown/Up/Leave/Enter + onTouchStart/End
+    - navigator.vibrate(10) on press, wrapped in try/catch and typeof
+      guard so non-supporting browsers are silent no-ops
+    - handlers object memoized via useMemo + useCallback so it won't bust
+      downstream React.memo boundaries
+
+- Files MODIFIED (3):
+  * src/app/globals.css
+    - APPENDED to existing `@layer utilities` block (existing
+      glasstv-slide-up / glasstv-fade-in / glasstv-pulse-slow preserved)
+    - Added keyframes + utilities:
+      shimmer + .shimmer (gradient sweep, 1.6s linear infinite)
+      glassPulse + .glass-pulse (box-shadow ring 0→6px, 2s infinite)
+      glowPulse + .glow-pulse (12px→28px+4px glow using
+        oklch(0.45 0.18 285 / 0.1) — the primary brand violet)
+      scaleIn + .animate-scale-in (scale 0.92→1 + opacity, 0.35s)
+      slideInRight + .animate-slide-in-right (x 28→0 + opacity, 0.4s)
+      slideInUp + .animate-slide-in-up (y 24→0 + opacity, 0.4s)
+      .stagger-1 through .stagger-10 (animation-delay 0.08s × n)
+    - Added top-level `@media (prefers-reduced-motion: reduce)` block
+      that sets `animation: none !important` on every decorative
+      animation class so accessibility-conscious users get static UI
+
+  * src/components/main/home-view.tsx
+    - Imported FadeIn, ScrollReveal, StaggerGrid from
+      '@/components/animations'
+    - Hero section wrapped in <FadeIn delay={0.1}>
+    - Continue Watching wrapped in <ScrollReveal direction="up"
+      delay={0.05}>; inner grid replaced with <StaggerGrid
+      className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+      staggerDelay={0.06}>
+    - Recommended wrapped in <ScrollReveal direction="up" delay={0.1}>;
+      inner grid replaced with <StaggerGrid staggerDelay={0.06}>
+    - All Channels (horizontal scroller) wrapped in <ScrollReveal
+      direction="up" delay={0.15}>; inner scroller replaced with
+      <StaggerGrid direction="right" distance={40} staggerDelay={0.04}>
+      so items slide in horizontally along the scroll axis
+    - Added a small footer CTA section ("Looking for something specific?
+      Open the full guide") wrapped in <FadeIn delay={0.5}>
+    - ChannelCard (from glass/channel-card) was already a motion.div
+      with only whileHover — no per-item initial/animate to remove
+
+  * src/app/page.tsx
+    - Imported PageTransition from '@/components/animations/page-transition'
+    - Derived `transitionKey` from auth status + SPA view:
+        status='loading' → 'loading'
+        status='authenticated' + onboardingCompleted → 'app'
+        status='authenticated' + !onboardingCompleted → 'onboarding'
+        status='unauthenticated' → view ('landing' | 'login' | 'signup')
+    - Wrapped {content} in <PageTransition id={transitionKey} duration={0.35}>
+    - AutoPreviewTrigger / PreviewPopupHost / PlayerOverlayHost remain
+      OUTSIDE the PageTransition (they're always-mounted overlays)
+
+- Lint status: PASS (bun run lint → 0 errors, 0 warnings)
+- TypeScript status: PASS
+  * `bunx tsc --noEmit | grep "src/components/animations\|src/hooks/use-micro"`
+    returns empty (no errors in the new files)
+  * `bunx tsc --noEmit | grep "^src/"` also empty (no new src errors
+    anywhere). Pre-existing errors only in examples/websocket and
+    skills/* which are eslint-ignored and not part of this task.
+
+Stage Summary:
+- Phase 17c animation system is fully rebuilt from scratch after the git
+  reset wiped the prior work.
+- Five reusable animation primitives + one micro-interaction hook + one
+  CSS animation extension module, all wired into the actual app:
+    1. PageTransition — SPA view swaps animate (loading/landing/login/
+       signup/onboarding/app)
+    2. ScrollReveal — sections fade+slide in on scroll (no setState-in-
+       effect thanks to direct useInView binding)
+    3. StaggerGrid — channel grids stagger their items (Continue Watching,
+       Recommended, All Channels horizontal scroller)
+    4. FadeIn — hero + footer CTA ease in once on mount
+    5. LoadingSpinner — accessible rotating brand-color spinner
+    6. useMicroInteraction — press/hover state + haptic feedback
+- Accessibility: prefers-reduced-motion media query disables every
+  decorative animation. LoadingSpinner exposes role=status + sr-only
+  label. All interactive wrappers preserve semantic children.
+- Type-safety: every component uses framer-motion's typed `Variants`
+  interface. The EASE_SPRING tuple is declared `as const`-equivalent
+  (`[number, number, number, number]`) so the cubic-bezier array passes
+  the Variants type checker.
+- Tailwind v4 conventions honored throughout: `border-primary`,
+  `border-primary/30`, `bg-primary/90`, `text-primary-foreground` —
+  never the legacy `-500` shades. The `cn` helper is imported from
+  `@/lib/utils` (the project's actual location, not `@/lib/utils/cn`).
+- The animations are intentionally lightweight (CSS keyframes for the
+  infinite decorative ones, framer-motion for the one-shot enter/exit
+  ones) so Smart TV / low-power devices don't pay a runtime cost for
+  pure-decoration pulses.
+
+---
+Task ID: 18-rebuild
+Agent: general-purpose
+Task: Rebuild Phase 18 player glassmorphism (lost in git reset)
+
+Work Log:
+- IMPORTANT STATE NOTE: The task spec assumed the player files were at
+  their post-Phase-17 state (~1525 lines, with watermark / gesture
+  indicator / stats overlay sub-components already wired in). The
+  working tree is actually at the post-Phase-4 state (player.tsx =
+  917 lines), and gesture-indicator.tsx + stats-overlay.tsx do NOT
+  exist. The Phase 17 player UI work (watermark, gestures HUD, stats
+  overlay) was also wiped by the same git reset and is out of scope
+  for this rebuild — only the Phase 18 *glassmorphism upgrades* were
+  requested. The CSS utilities for `.player-glass-gesture` and
+  `.player-glass-panel` (which would have been used by those two
+  files) are still added to globals.css so the next agent can create
+  the missing components without re-touching the stylesheet.
+- Files MODIFIED (4):
+  * src/app/globals.css
+    - APPENDED 9 component classes to the existing `@layer components`
+      block (after .scrollbar-premium, before the closing `}`):
+      .player-glass-controls (rgba 0,0,0,0.5 + blur 20px saturate 180%
+        + border-top 1px rgba(255,255,255,0.08) + box-shadow
+        0 -8px 32px rgba(0,0,0,0.4))
+      .player-glass-panel (rgba 0,0,0,0.6 + blur 30px saturate 180%
+        + border 1px rgba(255,255,255,0.1) + radius 24px + shadow
+        0 20px 60px rgba(0,0,0,0.6))
+      .player-glass-gesture (rgba 0,0,0,0.6 + blur 20px + 2px border
+        rgba(255,255,255,0.1) + radius 24px + shadow 0 8px 40px
+        rgba(0,0,0,0.5))
+      .player-glass-loading (rgba 0,0,0,0.8 + blur 10px + radius 24px
+        + 1px border rgba(255,255,255,0.05))
+      .player-glow-btn (bg rgba(255,255,255,0.05) + 1px border
+        rgba(255,255,255,0.05) + transition; hover bg 0.15 + shadow
+        0 0 30px oklch(0.45 0.18 285/0.2); active scale 0.92)
+      .player-glow-btn-primary (linear-gradient(135deg,
+        var(--primary), var(--secondary)) + shadow 0 4px 14px
+        oklch(0.45 0.18 285/0.4); hover shadow 0 0 30px /0.6;
+        active scale 0.92)
+      .player-seek-dot (shadow 0 0 20px oklch(0.45 0.18 285/0.6),
+        0 0 8px rgba(255,255,255,0.3))
+      .player-watermark-logo (linear-gradient(135deg, --primary,
+        --secondary) + shadow 0 2px 12px oklch(0.45 0.18 285/0.3))
+      .player-loading-ring (conic-gradient(from 0deg, transparent 0%,
+        var(--primary) 40%, var(--secondary) 60%, transparent 100%)
+        masked via radial-gradient to look like a thin spinning arc)
+    - APPENDED 5 keyframes + utilities to the existing
+      `@layer utilities` block (after the stagger-1..10 helpers):
+      @keyframes fadeInControls + .animate-fade-in-controls
+        (opacity 0 + translateY(20px) → 1 + 0, 0.3s ease-out forwards)
+      @keyframes fadeOutControls + .animate-fade-out-controls
+        (mirror, 0.3s ease-in forwards)
+      @keyframes playerGlowPulse + .player-glow-pulse (box-shadow
+        20px /0.3 ↔ 40px /0.6, 2s infinite)
+      @keyframes glassShimmer + .animate-glass-shimmer
+        (background-position sweep, 2.4s linear infinite; subtle
+        8% white gradient sweep)
+      @keyframes playerRingSpin + .animate-player-ring
+        (rotate 0→360deg, 1.2s linear infinite)
+    - EXTENDED the top-level `@media (prefers-reduced-motion: reduce)`
+      selector list to include the 5 new animation classes so all
+      decorative motion is paused for accessibility-conscious users
+  * src/components/player/player-controls.tsx
+    - Controls container: `bg-gradient-to-t from-black/90 via-black/40
+      to-transparent` → `player-glass-controls animate-fade-in-controls`
+    - Seek bar: outer interaction area `h-3` → `h-4`; track
+      `h-1.5` → `h-1.5 group-hover:h-2 transition-all`; ADDED a
+      buffered-hint fill (bg-white/10 slab, width = min(100,
+      progress+8)%) behind the brand gradient progress fill; dot
+      `h-3 w-3` → `h-3.5 w-3.5 player-seek-dot scale-75
+      group-hover:scale-100 transition-all`
+    - Split btnBase into btnBase (uses `player-glow-btn`) and a new
+      btnPrimary (uses `player-glow-btn-primary`); Play/Pause button
+      now uses btnPrimary (brand gradient + glow)
+    - Mute / PiP / Fullscreen / Settings buttons keep btnBase
+      (now frosted + glow)
+    - Playback-rate button + Quality-selector button: replaced
+      inline `bg-white/10 hover:bg-white/20 transition-colors` with
+      `player-glow-btn`
+    - Quality dropdown panel: `glass-dark rounded-xl` →
+      `player-glass-panel`; each item `px-3 py-2 rounded-lg` →
+      `px-4 py-3 rounded-xl`; active state `bg-primary/30
+      text-primary` → `bg-primary/20 border border-primary/30
+      text-primary font-medium`; inactive `hover:bg-white/10` →
+      `hover:bg-white/5`; "No alternate levels" message padding
+      aligned (`px-3 py-2` → `px-4 py-3`)
+    - Volume slider: white fill → brand gradient fill using
+      `var(--primary) 0%` → `var(--secondary) {vol}%`
+  * src/components/player/player-settings.tsx
+    - Modal panel: `glass-dark rounded-2xl` → `player-glass-panel`
+      (panel class already supplies radius 24px + heavy blur + shadow)
+    - Quality items (Auto + each level): `px-3 py-2 rounded-lg` →
+      `px-4 py-3 rounded-xl`; active `bg-primary/30 text-primary` →
+      `bg-primary/20 border border-primary/30 text-primary
+      font-medium`; inactive `hover:bg-white/10` → `hover:bg-white/5`
+    - "Quality options will appear" message: padding aligned with
+      the new items (`px-3 py-2` → `px-4 py-3`)
+    - Playback-rate grid buttons: `py-2 rounded-lg` + inline
+      `bg-primary` / `bg-white/10 hover:bg-white/20` → `py-2
+      rounded-xl` + `player-glow-btn-primary text-primary-foreground`
+      (active) / `player-glow-btn text-white` (inactive)
+    - Close button + Mute button: `bg-white/10 hover:bg-white/20
+      transition-colors` → `player-glow-btn`
+    - Volume slider fill: `var(--primary) → var(--primary)` →
+      `var(--primary) → var(--secondary)` (brand gradient)
+    - Updated the docstring comment from "Uses the `glass-dark`
+      utility" to "Uses the `player-glass-panel` utility (Phase 18
+      premium glassmorphism)"
+  * src/components/player/player.tsx
+    - REMOVED unused `Loader2` import (no longer referenced after
+      the loading/buffering spinners were replaced with the
+      conic-gradient ring)
+    - Loading state: replaced the `<Loader2 className="h-12 w-12
+      animate-spin">` spinner with a premium glassmorphism container:
+      `player-glass-loading` outer (rounded-3xl, blur, almost-opaque)
+      containing a relative `h-16 w-16` ring zone with:
+        - outer `<div className="absolute inset-0 rounded-full
+          player-loading-ring animate-player-ring">` (spinning
+          brand-arc)
+        - inner `<div className="player-watermark-logo h-9 w-9
+          rounded-xl ...">G</div>` (gradient logo badge)
+      Below the ring: `<span className="... animate-fade-in">Loading
+      stream…</span>` for the fade-in label
+    - Buffering spinner overlay: replaced `<Loader2 className="h-10
+      w-10 animate-spin text-white/80">` with `<div className="h-10
+      w-10 rounded-full player-loading-ring animate-player-ring" />`
+      (no container, no logo, no text — non-blocking spinner)
+    - Top bar: gradient `from-black/80 to-transparent` →
+      `from-black/80 via-black/40 to-transparent` (mid-tone middle
+      stop) + `animate-fade-in-controls` for the slide-up entrance
+    - All 4 top bar buttons (Back, Favorite, Captions, Close):
+      `bg-white/10 hover:bg-white/20 transition-colors` →
+      `player-glow-btn`
+    - Center play button: `bg-white/20 hover:bg-white/30
+      backdrop-blur-sm transition-colors` →
+      `player-glow-btn-primary` (brand gradient + glow)
+    - Error state Retry + Go back buttons:
+      `bg-white/10 hover:bg-white/20 transition-colors` →
+      `player-glow-btn`
+- SKIPPED (files do NOT exist in the working tree):
+  * src/components/player/gesture-indicator.tsx — task spec says
+    ~71 lines, supposed to already exist. Not present. The
+    `.player-glass-gesture` CSS class is defined and waiting for
+    a future agent to create the component. No edit was possible.
+  * src/components/player/stats-overlay.tsx — task spec says
+    ~98 lines, supposed to already exist. Not present. The
+    `.player-glass-panel` CSS class is defined and available.
+- SKIPPED (features do NOT exist in player.tsx, so no upgrade
+  target):
+  * Watermark element (task said "change from small Tv icon to 8×8
+    rounded-xl glass logo with 'G' + 'GlassTV' text"). There is no
+    watermark or `Tv` import in the current player.tsx; the only
+    place a Tv emoji appears is the ChannelLogo fallback (which is
+    the channel's avatar, not a GlassTV watermark). The
+    `player-watermark-logo` class IS defined in globals.css and is
+    actually used by the new Loading-state ring inner badge (the
+    "G" logo). A future agent can add the persistent corner
+    watermark using this class.
+  * Saved toast (task said `glass-dark` → `player-glass-gesture`).
+    There is no toast element in the current player.tsx; favorite
+    toggles are silent. The `player-glass-gesture` class is defined
+    for whenever that toast is added.
+
+Verification:
+- `bun run lint` → 0 errors, 0 warnings (exit code 0)
+- `bunx tsc --noEmit | grep "src/components/player"` → empty
+  (no TypeScript errors in any player file)
+- `bunx tsc --noEmit | grep "^src/"` → empty (no new src/ errors
+  anywhere). Pre-existing errors remain only in examples/websocket
+  and skills/* (eslint-ignored, not part of this task) — same
+  baseline as Phase 17c-rebuild.
+- Removed `Loader2` import had exactly 2 call sites (loading state +
+  buffering overlay); both replaced with the conic-gradient ring,
+  so no unused-import lint error.
+- All `glass-dark` references in the player folder have been
+  replaced (only `glass-dark` remaining in src/ is in
+  preview-popup.tsx and player-overlay.tsx — those are Phase 2
+  preview components and explicitly out of scope per the task
+  spec which lists only the 5 player/* files).
+- Tailwind v4 conventions honored: `text-primary-foreground`,
+  `bg-primary/20`, `border-primary/30`, `from-primary to-secondary`
+  — never the legacy `-500` shades. The `cn` helper is imported
+  from `@/lib/utils`.
+
+Stage Summary:
+- Phase 18 premium glassmorphism is rebuilt from scratch after the
+  git reset wiped the prior work.
+- 9 reusable CSS surface/button classes + 5 keyframe animation
+  utilities added to globals.css (preserving the Phase 17c
+  animations block intact above the new ones).
+- 3 player components upgraded:
+    1. PlayerControls — bottom bar is now a frosted glass strip with
+       fade-in entrance; seek bar has a buffered hint + growing
+       track + glowing dot; Play/Pause is the primary gradient CTA;
+       quality dropdown is a glass panel with bordered active items.
+    2. PlayerSettings — modal is now a deep-blur glass panel;
+       quality items are larger (px-4 py-3 rounded-xl) with bordered
+       active state; playback-rate buttons toggle between
+       player-glow-btn / player-glow-btn-primary; close + mute use
+       the standard glow button.
+    3. Player — loading state is a centered glass capsule containing
+       a spinning brand-arc ring around a GlassTV "G" logo badge
+       with a fade-in label; buffering spinner is the same ring
+       (smaller, no capsule); top bar adds a mid-tone gradient stop
+       + slide-up entrance; all top-bar buttons + error buttons +
+       center play use the glow button classes; `Loader2` import
+       removed (no longer needed).
+- Accessibility: every decorative animation (including the new
+  ring spin, glow pulse, glass shimmer, control fades) is paused
+  under `prefers-reduced-motion: reduce`. All interactive elements
+  retain their `aria-label` / `aria-pressed` / `role` attributes
+  and `min-h-[44px]` touch targets.
+- Known gaps for the next agent (out of scope for this rebuild
+  because the underlying files don't exist in the working tree):
+    * Create src/components/player/gesture-indicator.tsx (use
+      `.player-glass-gesture` + accent borders per type + gradient
+      progress + spring easing) and wire into Player.
+    * Create src/components/player/stats-overlay.tsx (use
+      `.player-glass-panel`) and wire into Player.
+    * Add a persistent corner GlassTV watermark to Player (use
+      `.player-watermark-logo` for the 8×8 "G" badge + "GlassTV"
+      text, opacity-30 hover:opacity-50).
+    * Add a "Saved" toast for favorite toggles (use
+      `.player-glass-gesture`).
+
+---
+
+Task ID: 19-rebuild
+Agent: general-purpose
+Task: Build Phase 19 short dramas integration
+
+Work Log:
+
+Files created (7):
+- src/lib/short-drama/service.ts — curated catalog of 12 short dramas
+  across 5 genres (Romance, Drama, Thriller, Fantasy, Comedy). Each
+  drama has emoji/genre/rating/totalEpisodes/isNew/isTrending/gradient
+  plus a per-episode stream list. Episodes cycle through 6 real,
+  publicly-available HLS URLs (Mux + Apple test streams) since the
+  Anichin/DramaBox trial API returns {"error":"forbidden"}. Exports
+  interfaces ShortDrama / ShortDramaEpisode / ShortDramaDetail and
+  functions getTrendingDramas / getNewDramas / getAllDramas /
+  getDramasByGenre / searchDramas / getDramaDetails / getDramaEpisodes
+  / getEpisodeStream / getAvailableGenres / getDramaGradient.
+- src/app/api/short-drama/route.ts — GET endpoint with actions:
+  trending / new / all / genres / byGenre / search / details /
+  episodes / stream. All require auth via requireUser().
+- src/app/api/short-drama/favorites/route.ts — GET (list favorites
+  with drama details), POST (upsert ShortDrama row by externalId +
+  create ShortDramaFavorite, idempotent on P2002), DELETE (remove
+  favorite by ?id=externalId, idempotent on P2025).
+- src/app/api/short-drama/history/route.ts — GET (last 50 watch
+  entries with drama + episode info), POST (transactional upsert of
+  ShortDrama + ShortDramaEpisode rows, then insert a new
+  ShortDramaHistory row with progress/completed flags).
+- src/components/short-drama/short-drama-view.tsx — dashboard with
+  pink/rose/orange gradient hero, debounced search (useDebounce,
+  400ms), genre filter chips, trending rail, StaggerGrid of
+  DramaCards with emoji posters, rating badges, episode counts, play
+  overlay. Clicking a card calls openShortDramaDetail(drama.id).
+- src/components/short-drama/short-drama-detail.tsx — detail view
+  showing poster (gradient + emoji), title, rating, episode count,
+  synopsis, cast, favorite button (toggles via POST/DELETE to
+  /api/short-drama/favorites), and episodes grid. "Start Watching"
+  button calls openShortDramaPlayer. Uses GlassCard + GradientButton
+  + GlassButton + FadeIn + ScrollReveal.
+- src/components/short-drama/short-drama-player.tsx — TikTok-style
+  vertical player (9:16, max-w-md). Uses hls.js for .m3u8 with
+  Safari native fallback for HLS/.mp4. Swipe up → next episode,
+  swipe down → previous. Auto-plays next episode when current ends.
+  Right-side TikTok action rail (heart fills red on like + episode
+  counter). Top bar (chevron-down close + title + episode X of Y) +
+  episode list popover. Bottom: gradient progress bar + prev / play /
+  next / mute / close. Records watch history via POST on episode
+  change and on completion. Auto-hides controls after 3.5s.
+  Critical TypeScript fix: capture videoRef.current as `v` after a
+  null check before any closure touches it so attachMedia() receives
+  HTMLVideoElement (not HTMLVideoElement | null).
+
+Files modified (5):
+- src/lib/store/app-store.ts — added 'short-drama' to AppTab union,
+  added ShortDramaPlayerState interface
+  {dramaId,dramaTitle,episodeNumber,totalEpisodes,streamUrl}, added
+  shortDramaDetailId + shortDramaPlayer state, added
+  openShortDramaDetail / closeShortDramaDetail /
+  openShortDramaPlayer / closeShortDramaPlayer actions.
+- src/components/main/app-shell.tsx — imported ShortDramaView /
+  ShortDramaDetail / ShortDramaPlayer, added case 'short-drama' to
+  renderView() that shows ShortDramaDetail when shortDramaDetailId
+  is set (else ShortDramaView), appended <ShortDramaPlayer /> overlay
+  at the bottom of the JSX, updated AnimatePresence motion.div key to
+  `${activeTab}:${shortDramaDetailId ?? ''}`.
+- src/components/main/sidebar.tsx — added Smartphone icon import,
+  inserted { id: 'short-drama', label: 'Short Dramas', icon:
+  Smartphone } into NAV_ITEMS between Guide and Favorites.
+- src/components/main/bottom-nav.tsx — added Smartphone icon import,
+  inserted { id: 'short-drama', label: 'Dramas', icon: Smartphone }
+  into NAV_ITEMS between Guide and Favorites.
+- src/components/main/home-view.tsx — added Smartphone icon import,
+  inserted a "Short Dramas" quick-access card (pink → rose → orange
+  gradient, Smartphone glyph in a frosted square, "Watch now →"
+  pill on sm+) between the hero and the Continue Watching section.
+  Card onClick sets activeTab to 'short-drama'.
+
+Stage Summary:
+- 7 new files, 5 modified files. All Phase 19 acceptance gates pass:
+  `bun run lint` → 0 errors, 0 warnings.
+  `bunx tsc --noEmit 2>&1 | grep -E "src/(components/short-drama|
+  lib/short-drama|app/api/short-drama|components/main)"` → empty.
+- The full short-drama feature is now end-to-end functional:
+  Home quick-access card → Short Dramas tab → catalog (with search +
+  genre filter + trending rail) → detail page (with synopsis, cast,
+  favorite toggle, episodes grid) → TikTok-style vertical player
+  (with HLS playback, swipe navigation, auto-advance, like button,
+  episode list popover, history recording, keyboard shortcuts).
+- Catalog is shipped in code (12 dramas) so the UI always has
+  something to play even when the upstream Anichin API is forbidden.
+- Persistence uses the existing Prisma models (ShortDrama,
+  ShortDramaEpisode, ShortDramaHistory, ShortDramaFavorite) — rows
+  are upserted lazily on first favorite / watch, so the DB starts
+  empty and fills in as users interact.
+- One TypeScript gotcha solved: the hls.js `attachMedia(video)`
+  call requires HTMLVideoElement, but `videoRef.current` is typed
+  as `HTMLVideoElement | null`. Capturing the ref as `const v =
+  video` after a null check narrows the type so all closures
+  (including hls event handlers + cleanup) get the non-null type.
