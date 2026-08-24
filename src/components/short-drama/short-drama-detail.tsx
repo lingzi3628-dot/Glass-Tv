@@ -210,12 +210,23 @@ export function ShortDramaDetail({ dramaId }: ShortDramaDetailProps) {
                 'relative aspect-[3/4] sm:aspect-auto sm:h-full min-h-[260px]',
                 'bg-gradient-to-br',
                 drama.gradient,
-                'flex items-center justify-center',
+                drama.emoji.startsWith('http') ? '' : 'flex items-center justify-center',
               )}
             >
-              <span className="text-7xl sm:text-8xl drop-shadow-lg" role="img" aria-label={drama.title}>
-                {drama.emoji}
-              </span>
+              {drama.emoji.startsWith('http') ? (
+                <img
+                  src={drama.emoji}
+                  alt={drama.title}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                   ;(e.target as HTMLImageElement).style.display = 'none'
+                  }}
+                />
+              ) : (
+                <span className="text-7xl sm:text-8xl drop-shadow-lg" role="img" aria-label={drama.title}>
+                  {drama.emoji.startsWith('emoji:') ? drama.emoji.slice('emoji:'.length) : drama.emoji}
+                </span>
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
               {drama.isNew ? (
                 <span className="absolute top-3 left-3 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-500 text-white shadow-md">

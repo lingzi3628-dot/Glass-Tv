@@ -72,16 +72,10 @@ export interface ShortDramaDetail extends ShortDrama {
 // ─────────────────────────────────────────────────────────────────────
 
 const HLS_STREAMS = [
-  // Mux Tears of Steel (different URL from IPTV's test_001)
+  // Tears of Steel — real 12-min sci-fi short film (NOT a test pattern)
   'https://test-streams.mux.dev/tos_ismc/main.m3u8',
-  // Apple bipbop streams (different from IPTV)
-  'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8',
-  'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8',
-  'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8',
-  // Mux DAI discontinuity test
-  'https://test-streams.mux.dev/dai-discontinuity-deltatre/manifest.m3u8',
-  // Akamai live test stream
-  'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
+  // Same film, different manifest (for variety between episodes)
+  'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
 ] as const
 
 /**
@@ -580,19 +574,23 @@ async function fetchDramaBoxFromApify(): Promise<ShortDrama[] | null> {
       const genre = tags[0] || 'Drama'
       const id = `db-${book.bookId}`
       const gradient = gradients[i % gradients.length]!
+      // Use real DramaBox cover image if available, otherwise fall back to emoji
+      const coverUrl = book.coverWap ?? ''
       i++
       dramas.push({
         id,
         title: book.bookName,
         description: book.introduction ?? '',
-        emoji: '🎬',
+        // If we have a real cover URL, use it directly (UI renders it as <img>).
+        // Otherwise use the emoji: prefix so UI renders the emoji.
+        emoji: coverUrl || 'emoji:🎬',
         genre,
-        rating: 8 + ((i * 7) % 20) / 10, // 8.0–9.9 (no real rating in API)
+        rating: 8 + ((i * 7) % 20) / 10,
         totalEpisodes: book.chapterCount ?? 0,
-        isNew: i <= 5, // first 5 marked as new
+        isNew: i <= 5,
         isTrending: true,
         gradient,
-        streams: [], // filled on-demand by buildStreams()
+        streams: [],
       })
     }
 

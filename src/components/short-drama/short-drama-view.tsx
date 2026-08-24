@@ -29,21 +29,38 @@ interface GenresResponse {
 // Local helpers
 // ─────────────────────────────────────────────────────────────────────
 
-function DramaPoster({ emoji, gradient, title }: { emoji: string; gradient: string; title: string }) {
+function DramaPoster({ emoji, gradient, title, coverUrl }: { emoji: string; gradient: string; title: string; coverUrl?: string }) {
+  const isImage = coverUrl && coverUrl.startsWith('http')
+  const isEmoji = emoji.startsWith('emoji:')
+  const glyph = isEmoji ? emoji.slice('emoji:'.length) : emoji
+
   return (
     <div
       className={cn(
         'relative aspect-[3/4] w-full overflow-hidden rounded-2xl',
         'bg-gradient-to-br',
         gradient,
-        'flex items-center justify-center',
+        isImage ? '' : 'flex items-center justify-center',
         'shadow-lg ring-1 ring-black/5',
       )}
       aria-hidden
     >
-      <span className="text-6xl sm:text-7xl drop-shadow-lg" role="img" aria-label={title}>
-        {emoji}
-      </span>
+      {isImage ? (
+        <img
+          src={coverUrl}
+          alt={title}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          onError={(e) => {
+            // If the cover image fails to load, hide it and show the gradient
+           ;(e.target as HTMLImageElement).style.display = 'none'
+          }}
+        />
+      ) : (
+        <span className="text-6xl sm:text-7xl drop-shadow-lg" role="img" aria-label={title}>
+          {glyph}
+        </span>
+      )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
     </div>
   )
@@ -125,7 +142,7 @@ function DramaCard({ drama, onClick }: DramaCardProps) {
       )}
       aria-label={`Open ${drama.title}`}
     >
-      <DramaPoster emoji={drama.emoji} gradient={drama.gradient} title={drama.title} />
+      <DramaPoster emoji={drama.emoji} gradient={drama.gradient} title={drama.title} coverUrl={drama.emoji.startsWith('http') ? drama.emoji : undefined} />
       <RatingBadge rating={drama.rating} />
       <EpisodeCountPill count={drama.totalEpisodes} />
       {drama.isNew ? <NewTag /> : drama.isTrending ? <TrendingTag /> : null}
