@@ -10,20 +10,13 @@
  */
 import { cookies } from 'next/headers'
 import { createHmac, timingSafeEqual, randomBytes, scryptSync, randomUUID } from 'crypto'
+import { FALLBACK_NEXTAUTH_SECRET } from '@/lib/config'
 
 const COOKIE_NAME = 'glasstv_session'
 const SESSION_TTL = 60 * 60 * 24 * 7 // 7 days
 
 function getSecret(): string {
-  const secret = process.env.NEXTAUTH_SECRET || process.env.SECRET
-  if (!secret) {
-    // Dev-only fallback so the app still boots without env config.
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('Missing NEXTAUTH_SECRET env var')
-    }
-    return 'glasstv-dev-secret-do-not-use-in-prod'
-  }
-  return secret
+  return process.env.NEXTAUTH_SECRET || process.env.SECRET || FALLBACK_NEXTAUTH_SECRET
 }
 
 /**

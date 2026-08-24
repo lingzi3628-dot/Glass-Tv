@@ -16,6 +16,8 @@
  * ShortDramaEpisode rows) when a user favorites or watches a drama.
  */
 
+import { FALLBACK_APIFY_TOKEN } from '@/lib/config'
+
 // ─────────────────────────────────────────────────────────────────────
 // Public types
 // ─────────────────────────────────────────────────────────────────────
@@ -480,7 +482,7 @@ const DRAMAS: ShortDramaDetail[] = [
 // Apify DramaBox API integration (real drama data)
 // ─────────────────────────────────────────────────────────────────────
 
-const APIFY_TOKEN = process.env.APIFY_TOKEN || ''
+const APIFY_TOKEN = process.env.APIFY_TOKEN || FALLBACK_APIFY_TOKEN
 const APIFY_ACTOR = 'ezvidnet~short-drama-api'
 const APIFY_RUN_URL = `https://api.apify.com/v2/acts/${APIFY_ACTOR}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&timeout=120`
 
